@@ -24,7 +24,6 @@ export async function initializeCornerstone(): Promise<void> {
     toolsToRegister.forEach((tool) => {
       if (tool) {
         addTool(tool);
-        console.log(`Registered tool: ${tool.toolName}`);
       } else {
         console.warn('Tool is undefined and was not registered.');
       }
@@ -37,7 +36,6 @@ export async function initializeCornerstone(): Promise<void> {
       if (waLoader.external) {
         waLoader.external.cornerstone = cornerstone3D;
         waLoader.external.dicomParser = dicomParser;
-        console.log('External dependencies set for WADO loader');
       } else { console.warn('waLoader.external not found!'); }
 
        if (waLoader.configure) {
@@ -45,13 +43,11 @@ export async function initializeCornerstone(): Promise<void> {
              useWebWorkers: false, // DISABLE workers
              decodeConfig: { convertFloatPixelDataToInt: false },
            });
-           console.log('WADO loader configured NOT to use web workers');
        } else { console.warn('waLoader.configure not found!'); }
        // If using Option B, REMOVE or COMMENT OUT the webWorkerManager.initialize block entirely
 
        if (waLoader.init && typeof waLoader.init === 'function') {
         await waLoader.init(); // Call the loader's init function
-        console.log('cornerstoneDICOMImageLoader initialized.');
       } else {
         console.warn('waLoader.init function not found! Scheme registration might fail.');
       }
@@ -74,7 +70,6 @@ export async function initializeCornerstone(): Promise<void> {
         try {
           // Assuming initialize might be async
           await waLoader.webWorkerManager.initialize(config);
-          console.log('Web Worker Manager initialized with config:', config);
         } catch (initError) {
           console.error('Failed to initialize Web Worker Manager:', initError);
         }
@@ -83,22 +78,15 @@ export async function initializeCornerstone(): Promise<void> {
       }
 
 
-      // --- >>> CRITICAL: REMOVED Manual Loader Registration <<< ---
-      console.log('Skipping manual image loader registration.');
-
-
       // Expose fileManager globally (optional)
       const fileManager = waLoader.wadouri?.fileManager;
       if (fileManager) {
         (window as any).cornerstoneFileManager = fileManager;
-        console.log('Cornerstone File Manager exposed globally');
-      } else { console.warn('waLoader.wadouri.fileManager not found!'); }
+        console.log('Cornerstone File Manager exposed globally')      } else { console.warn('waLoader.wadouri.fileManager not found!'); }
 
-      console.log('Cornerstone WADO Image Loader setup complete.');
 
     } catch (error) { console.error('Error configuring WADO Image Loader:', error); }
 
-    console.log('Cornerstone initialization completed successfully');
 
   } catch (error) {
     console.error('Error initializing Cornerstone:', error);
@@ -120,7 +108,6 @@ export async function addFileToCornerstone(file: File): Promise<string> {
 
   // File UID returned (contains unwanted "dicomfile:" prefix)
   const imageId = waLoader.wadouri.fileManager.add(file);
-  console.log(`File registered with raw UID: ${imageId}`);
 
 
   return imageId;
@@ -132,14 +119,12 @@ export async function addFileToCornerstone(file: File): Promise<string> {
  * Clean up Cornerstone resources
  */
 export function cleanupCornerstone(): void {
-  console.log('Cornerstone cleanup');
   
   try {
     // Clean up the file manager if needed
     const waLoader = cornerstoneDICOMImageLoader as any;
     if (waLoader.wadouri && waLoader.wadouri.fileManager && waLoader.wadouri.fileManager.purge) {
       waLoader.wadouri.fileManager.purge();
-      console.log('Purged Cornerstone file manager');
     }
   } catch (error) {
     console.error('Error cleaning up Cornerstone file manager:', error);

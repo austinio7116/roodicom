@@ -1,16 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Paper, Typography, CircularProgress } from '@mui/material';
+import { Box, Paper, Typography, CircularProgress, Slider } from '@mui/material'; // Grouped Slider import
 import * as cornerstone3D from '@cornerstonejs/core';
 import * as cornerstoneTools from '@cornerstonejs/tools';
 import { ToolGroupManager } from '@cornerstonejs/tools';
+import { Enums as csCoreEnums } from '@cornerstonejs/core'; // Alias for Core Enums
+import { Enums as csToolsEnums } from '@cornerstonejs/tools'; // Alias for Tools Enums
 import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import {
   setActiveViewport,
   imageLoaded as imageLoadedAction,
   imageError as imageErrorAction,
 } from '../../store/slices/viewportsSlice';
-import { Slider } from '@mui/material';
-import { Enums } from '@cornerstonejs/core';
+
+// Removed duplicate Slider import from original code
 
 interface ViewportProps {
   viewportId: string;
@@ -33,6 +35,7 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
 
   const isActive = activeViewportId === viewportId;
 
+  // --- Initialization Effect ---
   useEffect(() => {
     if (!viewportRef.current) return;
 
@@ -41,253 +44,422 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
         const element = viewportRef.current;
         if (!element) return;
 
+        // Initialize Cornerstone if not already done
         if (!(window as any).cornerstoneInitialized) {
           await cornerstone3D.init();
           await cornerstoneTools.init();
           (window as any).cornerstoneInitialized = true;
         }
 
-        const renderingEngine = new cornerstone3D.RenderingEngine(renderingEngineId);
+        // Create Rendering Engine
+        // Check if engine already exists (e.g., due to fast refresh/re-render)
+        let renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+        if (!renderingEngine) {
+          renderingEngine = new cornerstone3D.RenderingEngine(renderingEngineId);
+        } else {
+            // If engine exists, ensure element is enabled (might have been disabled)
+            try {
+                renderingEngine.getViewport(cornerstoneViewportId);
+            } catch {
+                 // Viewport doesn't exist on this engine, enable element
+                 const viewportInput = {
+                   viewportId: cornerstoneViewportId,
+                   element,
+                   type: csCoreEnums.ViewportType.STACK,
+                 };
+                 renderingEngine.enableElement(viewportInput);
+            }
+        }
 
-        const viewportInput = {
-          viewportId: cornerstoneViewportId,
-          element,
-          type: cornerstone3D.Enums.ViewportType.STACK,
-        };
 
-        renderingEngine.enableElement(viewportInput);
+        // Enable the element if not already enabled by the engine check
+        if (!renderingEngine.getViewport(cornerstoneViewportId)) {
+             const viewportInput = {
+               viewportId: cornerstoneViewportId,
+               element,
+               type: csCoreEnums.ViewportType.STACK,
+             };
+            renderingEngine.enableElement(viewportInput);
+        }
 
+
+        // Create or Get ToolGroup
         let toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
         if (!toolGroup) {
           toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
-          toolGroup!.addViewport(cornerstoneViewportId, renderingEngineId);
+          if (!toolGroup) {
+              throw new Error(`Failed to create ToolGroup: ${toolGroupId}`)
+          }
+          toolGroup.addViewport(cornerstoneViewportId, renderingEngineId);
 
           const toolsToAdd = [
-            'StackScroll',
-            'WindowLevel',
-            'Zoom',
-            'Pan',
-            'Length',
-            'Angle',
-            'RectangleROI',
-            'EllipticalROI',
+            'StackScroll', 'WindowLevel', 'Zoom', 'Pan',
+            'Length', 'Angle', 'RectangleROI', 'EllipticalROI',
           ];
 
-          for (const toolName of toolsToAdd) {
-            toolGroup!.addTool(toolName);
-          }
-          toolGroup!.setToolPassive('StackScroll'); // allow it to run passively
+          toolsToAdd.forEach(toolName => {
+             // Need to add the tool class itself, not just the name string
+             // Assuming the tool classes are available via cornerstoneTools
+             // e.g., cornerstoneTools.StackScrollTool, cornerstoneTools.WindowLevelTool etc.
+             // The exact way to add tools might depend on specific version setup.
+             // This example assumes cornerstoneTools.addTool(ToolClass) was called previously or implicitly available.
+             // If using named tools requires explicit registration first, that should happen during cornerstoneTools.init() or similar setup phase.
+             try {
+                toolGroup.addTool(toolName);
+             } catch (addError) {
+                 console.warn(`Could not add tool ${toolName} to group ${toolGroupId}. Maybe it was already added?`, addError)
+             }
+          });
 
-          toolGroup!.setToolActive('StackScroll', {
+          toolGroup.setToolPassive('StackScroll'); // Allow StackScroll via wheel even if another tool is active
+
+          // Set StackScroll active for MouseWheel interaction
+          toolGroup.setToolActive('StackScroll', {
             bindings: [
+              // The type casting might be necessary depending on library versions
               { type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding
             ],
           });
-          
 
-          toolGroup!.setToolActive('WindowLevel', {
-            bindings: [{ mouseButton: cornerstoneTools.Enums.MouseBindings.Primary }],
-          });
+          // Set WindowLevel active for Primary Mouse Button interaction (ONLY ONCE)
+          // The default active tool might be set later based on Redux state
+          // toolGroup.setToolActive('WindowLevel', {
+          //   bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
+          // });
+          // Removed duplicate activation
 
-
-          toolGroup!.setToolActive('WindowLevel', {
-            bindings: [{ mouseButton: cornerstoneTools.Enums.MouseBindings.Primary }],
-          });
+        } else {
+            // Ensure viewport is added if toolgroup already existed
+            if (!toolGroup.getViewportIds().includes(cornerstoneViewportId)) {
+                toolGroup.addViewport(cornerstoneViewportId, renderingEngineId);
+            }
         }
 
-        (window as any).renderingEngine = renderingEngine;
+        // Optional: Store engine globally (use with caution)
+        // (window as any).renderingEngine = renderingEngine;
+
       } catch (error) {
         console.error('Error initializing viewport:', error);
+        // Optionally dispatch an error state here
       }
     };
 
     initializeViewport();
 
+    // Cleanup
     return () => {
       try {
         const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
         if (renderingEngine) {
+          // Remove viewport from toolgroup
+          const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+          if (toolGroup) {
+            toolGroup.removeViewports(renderingEngineId, cornerstoneViewportId);
+            // Consider destroying the toolgroup if it's no longer needed by other viewports
+            // if (toolGroup.getViewportIds().length === 0) {
+            //   ToolGroupManager.destroyToolGroup(toolGroupId);
+            // }
+          }
+          // Disable the element first
           renderingEngine.disableElement(cornerstoneViewportId);
-          renderingEngine.destroy();
+          // Only destroy engine if this is the last element/component using it
+          // A more robust approach might involve reference counting or context management
+          if (renderingEngine.getViewports().length === 0) {
+             renderingEngine.destroy();
+          }
+
         }
       } catch (error) {
         console.error('Error cleaning up viewport:', error);
       }
     };
-  }, [viewportId, cornerstoneViewportId, renderingEngineId, toolGroupId]);
+  }, [viewportId, cornerstoneViewportId, renderingEngineId, toolGroupId]); // Stable dependencies
 
+// --- Active Tool Effect ---
+useEffect(() => {
+  const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+  // Only proceed if the tool group exists AND this viewport is the active one
+  if (!toolGroup || !isActive) {
+      return;
+  }
+
+  // Define tools usually activated by Primary mouse button
+  const primaryBindingTools = [
+      'WindowLevel', 'Zoom', 'Pan', 'Length', 'Angle', 'RectangleROI', 'EllipticalROI'
+  ];
+
+  // --- Step 1: Set ALL relevant tools passive initially ---
+  // This clears previous bindings before setting new ones.
+  [...primaryBindingTools, 'StackScroll'].forEach(toolName => {
+      if (toolGroup.hasTool(toolName)) {
+          toolGroup.setToolPassive(toolName);
+      }
+  });
+
+  // --- Step 2: Activate the PRIMARY tool (and Wheel if StackScroll) ---
+  if (activeTool && primaryBindingTools.includes(activeTool) && toolGroup.hasTool(activeTool)) {
+      // --- Step 2a: Activate standard primary tools (WL, Pan, Zoom, etc.) ---
+      try {
+          toolGroup.setToolActive(activeTool, {
+              bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
+              mode: 'Active', // Be explicit with mode
+              overwrite: true // Ensure this binding takes precedence
+          });
+      } catch (error) {
+          console.warn(`[${viewportId}] Failed to activate primary tool ${activeTool}:`, error);
+      }
+
+  } else if (activeTool === 'StackScroll') {
+      // --- Step 2b: Activate StackScroll for Primary AND Wheel --- // MODIFIED LOGIC
+      if (toolGroup.hasTool('StackScroll')) {
+          try {
+              toolGroup.setToolActive('StackScroll', {
+                  bindings: [ // Provide both bindings explicitly
+                      { mouseButton: csToolsEnums.MouseBindings.Primary },
+                      { type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding
+                  ],
+                  mode: 'Active', // Set mode to Active
+                  overwrite: true // Ensure these bindings take precedence and replace any others for StackScroll
+              });
+          } catch (error) {
+              console.error(`[${viewportId}] Failed to activate StackScroll for Primary and Wheel:`, error);
+          }
+      } else {
+          console.warn(`[${viewportId}] StackScroll tool not found when selected.`);
+      }
+
+  } else {
+      // --- Step 2c: Fallback primary tool ---
+      const fallbackPrimaryTool = 'WindowLevel';
+      if (toolGroup.hasTool(fallbackPrimaryTool)) {
+          try {
+              
+              toolGroup.setToolActive(fallbackPrimaryTool, {
+                  bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
+                  mode: 'Active',
+                  overwrite: true
+              });
+          } catch (error) {
+              console.warn(`[${viewportId}] Failed to activate fallback primary tool ${fallbackPrimaryTool}:`, error);
+          }
+      } else {
+          console.warn(`[${viewportId}] Fallback primary tool ${fallbackPrimaryTool} not found.`);
+      }
+  }
+
+  // --- Step 3: Ensure Wheel Scroll if StackScroll is NOT the primary tool --- // MODIFIED LOGIC
+  // If another tool is primary (Step 2a or 2c), StackScroll should still respond *only* to the wheel.
+  // Step 2b handles the case where StackScroll IS the primary tool.
+  if (activeTool !== 'StackScroll' && toolGroup.hasTool('StackScroll')) {
+       try {
+           // Activate ONLY for wheel. Explicit mode might be important.
+           toolGroup.setToolActive('StackScroll', {
+               bindings: [{ type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding],
+               mode: 'Active', // Let's try 'Active' mode for the wheel binding too
+               // NO overwrite: true here - we don't want to disrupt the primary tool's binding.
+           });
+       } catch (error) {
+           console.error(`[${viewportId}] Failed to set StackScroll for MouseWheel (non-primary case):`, error);
+       }
+  } else if (activeTool !== 'StackScroll' && !toolGroup.hasTool('StackScroll')) {
+       // Log if StackScroll tool isn't found and wheel won't work
+       console.warn(`[${viewportId}] StackScroll tool not found. Wheel scroll disabled.`);
+  }
+   // If activeTool IS 'StackScroll', Step 2b already handled its wheel binding along with the primary one.
+
+}, [activeTool, isActive, toolGroupId, viewportId]); // Dependencies
+
+
+  // --- Image Loading Effect ---
   useEffect(() => {
-    if (!isActive) return;
-
-    const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
-    if (!toolGroup) return;
-
-    const toolNames = [
-      'WindowLevel',
-      'StackScroll',
-      'Zoom',
-      'Pan',
-      'Length',
-      'Angle',
-      'RectangleROI',
-      'EllipticalROI',
-    ];
-
-    for (const tool of toolNames) {
-      toolGroup.setToolPassive(tool);
-    }
-
-    try {
-      toolGroup.setToolActive(activeTool, {
-        bindings: [{ mouseButton: cornerstoneTools.Enums.MouseBindings.Primary }],
-      });
-      toolGroup.setToolPassive('StackScroll'); // Always passive to allow wheel scroll
-    } catch (error) {
-      console.warn(`Could not activate tool: ${activeTool}`, error);
-    }
-  }, [activeTool, isActive, toolGroupId]);
-
-  useEffect(() => {
+    // Guard clauses
     if (!viewportRef.current || !viewport) {
       setLocalImageLoaded(false);
       return;
     }
-
-    const loadImageStack = async () => {
-      try {
-        const imageIds = viewport.imageIds;
-        if (!imageIds || imageIds.length === 0) throw new Error('No image IDs provided');
-
-        let renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
-        if (!renderingEngine) {
-          renderingEngine = new cornerstone3D.RenderingEngine(renderingEngineId);
-          if (!viewportRef.current) throw new Error('Viewport element is null');
-
-          renderingEngine.enableElement({
-            viewportId: cornerstoneViewportId,
-            element: viewportRef.current,
-            type: cornerstone3D.Enums.ViewportType.STACK,
-          });
-        }
-
-        const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as any;
-        await stackViewport.setStack(imageIds, 0);
-        renderingEngine.render();
-
-        (window as any).lastStackViewport = stackViewport;
-        (window as any).lastRenderingEngine = renderingEngine;
-
-        setLocalImageLoaded(true);
-        console.log("setting 0")
-        setCurrentImageIndex(0);
-        dispatch(imageLoadedAction({ viewportId }));
-
-        const info = getImageInfo();
-        if (info) console.log('Image stack loaded successfully:', info);
-      } catch (error) {
-        console.error('Error loading image stack:', error);
-        setLocalImageError(error instanceof Error ? error.message : 'Failed to load image stack');
-        dispatch(imageErrorAction({ viewportId, error: 'Failed to load image stack' }));
-      }
-    };
-
-    const loadSingleImage = async () => {
-      try {
-        const imageId = viewport.imageId;
-        if (!imageId) throw new Error('No image ID provided');
-
-        let renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
-        if (!renderingEngine) {
-          renderingEngine = new cornerstone3D.RenderingEngine(renderingEngineId);
-          if (!viewportRef.current) throw new Error('Viewport element is null');
-
-          renderingEngine.enableElement({
-            viewportId: cornerstoneViewportId,
-            element: viewportRef.current,
-            type: cornerstone3D.Enums.ViewportType.STACK,
-          });
-        }
-
-        const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as any;
-        console.log("setting stack 0")
-        await stackViewport.setStack([imageId], 0);
-        renderingEngine.render();
-
-        (window as any).lastStackViewport = stackViewport;
-        (window as any).lastRenderingEngine = renderingEngine;
-
-        setLocalImageLoaded(true);
-        console.log("setting stack intdex 0")
-        setCurrentImageIndex(0);
-        dispatch(imageLoadedAction({ viewportId }));
-
-        const info = getImageInfo();
-        if (info) console.log('Image loaded successfully:', info);
-      } catch (error) {
-        console.error('Error loading image:', error);
-        setLocalImageError(error instanceof Error ? error.message : 'Failed to load image');
-        dispatch(imageErrorAction({ viewportId, error: 'Failed to load image' }));
-      }
-    };
-
-    setLocalImageLoaded(false);
-    setLocalImageError(null);
-
-    if (viewport.imageIds?.length) loadImageStack();
-    else if (viewport.imageId) loadSingleImage();
-  }, [viewport?.imageId, viewport?.imageIds, viewportId, dispatch, cornerstoneViewportId, renderingEngineId]);
-
-  useEffect(() => {
-    try {
-      const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
-      const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as any;
-  
-      if (!stackViewport) {
-        console.warn('❌ No stack viewport found');
-        return;
-      }
-  
-      const element = stackViewport.element;
-      if (!element) {
-        console.warn('❌ No element found on viewport');
-        return;
-      }
-  
-      console.log('✅ Found stack viewport and element:', stackViewport, element);
-  
-      const handleScroll = (event: any) => {
-        console.log('📸 Scroll event fired:', event.detail);
-        if (event.detail?.newImageIdIndex != null) {
-          setCurrentImageIndex(event.detail.newImageIdIndex);
-        }
-      };
-  
-      element.addEventListener('cornerstoneimagerendered', handleScroll);
-  
-      return () => {
-        element.removeEventListener('cornerstoneimagerendered', handleScroll);
-      };
-    } catch (err) {
-      console.error('❌ Error setting up scroll listener:', err);
+    if (!viewport.imageId && (!viewport.imageIds || viewport.imageIds.length === 0)) {
+       // If no imageId(s) are provided in the viewport state, do nothing here.
+       // Optionally clear the viewport if needed.
+       setLocalImageLoaded(false);
+       return;
     }
-  }, [renderingEngineId, cornerstoneViewportId]);
-  
 
+
+    const loadImage = async () => {
+        setLocalImageLoaded(false); // Reset loaded state
+        setLocalImageError(null);   // Reset error state
+
+        try {
+            const imageIdToLoad = viewport.imageId;
+            const imageIdsToLoad = viewport.imageIds;
+
+            let renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+            if (!renderingEngine) {
+                // This case should ideally be prevented by the initialization effect,
+                // but handle defensively.
+                console.error('Image Loading Error: Rendering Engine not found!');
+                throw new Error('Rendering Engine not initialized');
+            }
+
+            const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as cornerstone3D.Types.IStackViewport;
+            if (!stackViewport) {
+                console.error('Image Loading Error: Stack Viewport not found!');
+                throw new Error('Stack Viewport not available');
+            }
+
+            if (imageIdsToLoad && imageIdsToLoad.length > 0) {
+                await stackViewport.setStack(imageIdsToLoad, 0); // Start at index 0
+                // Note: cornerstoneTools might automatically handle voi/lut based on metadata
+                // stackViewport.resetCamera(); // Optionally reset camera
+                // stackViewport.render(); // setStack usually triggers render, but explicit call ensures it
+                renderingEngine.renderViewports([cornerstoneViewportId]); // Render this specific viewport
+
+                setCurrentImageIndex(0); // Reset index state
+                setLocalImageLoaded(true);
+                dispatch(imageLoadedAction({ viewportId }));
+                console.log('Image stack loaded successfully.');
+
+            } else if (imageIdToLoad) {
+                // Use setStack with a single image ID array
+                await stackViewport.setStack([imageIdToLoad], 0);
+                // stackViewport.resetCamera(); // Optionally reset camera
+                // stackViewport.render();
+                renderingEngine.renderViewports([cornerstoneViewportId]);
+
+                setCurrentImageIndex(0); // Index is 0 for single image stack
+                setLocalImageLoaded(true);
+                dispatch(imageLoadedAction({ viewportId }));
+            } else {
+                 console.log("No imageId or imageIds provided to load.")
+                 // Optionally clear the viewport if needed
+                 // stackViewport.reset(); // or similar method
+            }
+
+        } catch (error) {
+            console.error(`Error loading image(s) for viewport ${viewportId}:`, error);
+            const errorMessage = error instanceof Error ? error.message : 'Failed to load image(s)';
+            setLocalImageError(errorMessage);
+            dispatch(imageErrorAction({ viewportId, error: errorMessage }));
+        }
+    };
+
+    loadImage();
+
+  }, [viewport?.imageId, viewport?.imageIds, viewportId, dispatch, cornerstoneViewportId, renderingEngineId]); // Dependencies for image loading
+
+
+// --- Slider Sync Listener Effect ---
+useEffect(() => {
+  // Only run if the image is loaded and we expect multiple images
+  if (!localImageLoaded || !viewport?.imageIds || viewport.imageIds.length <= 1) {
+    return; // No listener needed if not loaded or only one image
+  }
+
+  let element: HTMLDivElement | null = null; // Keep track of the element for cleanup
+  let capturedRenderingEngine: cornerstone3D.RenderingEngine | null = null; // Variable to hold the engine instance
+
+  try {
+    // Get the rendering engine instance reliably at the start of the effect
+    const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+    if (!renderingEngine) {
+      console.warn('❌ Slider Sync Listener: Rendering engine not found when setting up listener.');
+      return; // Engine not available
+    }
+    capturedRenderingEngine = renderingEngine; // Store the engine instance for use in the handler
+
+    const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as cornerstone3D.Types.IStackViewport;
+    if (!stackViewport) {
+      console.warn('❌ Slider Sync Listener: No stack viewport found when setting up listener.');
+      return; // Viewport not available
+    }
+
+    element = stackViewport.element; // Get the element
+    if (!element) {
+      console.warn('❌ Slider Sync Listener: No element found on viewport when setting up listener.');
+      return; // Element not available
+    }
+
+    const handleImageRendered = (evt: cornerstone3D.Types.EventTypes.ImageRenderedEvent) => {
+      // Still check if the event is for the correct viewportId
+      if (evt.detail.viewportId !== cornerstoneViewportId) {
+          return;
+      }
+
+      // Ensure we have the captured rendering engine instance
+      if (!capturedRenderingEngine) {
+          console.warn(`[${cornerstoneViewportId}] Rendering engine instance lost in IMAGE_RENDERED handler.`);
+          return;
+      }
+
+      try {
+           // Get the viewport instance using the captured engine and the known ID
+           // This is more reliable than evt.detail.viewport
+           const vp = capturedRenderingEngine.getViewport(cornerstoneViewportId) as cornerstone3D.Types.IStackViewport;
+
+           // Perform checks *after* getting the viewport via the engine
+           if (!vp || typeof vp.getCurrentImageIdIndex !== 'function') {
+               console.warn(`[${cornerstoneViewportId}] Viewport invalid or getCurrentImageIdIndex missing via engine in IMAGE_RENDERED handler.`);
+               return;
+           }
+
+           const newImageIdIndex = vp.getCurrentImageIdIndex();
+
+           // Only update React state if the index actually changed
+           // Compare with the 'currentImageIndex' state variable from the outer scope
+           if (newImageIdIndex !== undefined && newImageIdIndex !== currentImageIndex) {
+               // console.log(`📸 Image Rendered: Index changed from ${currentImageIndex} to ${newImageIdIndex}. Updating slider state.`);
+               setCurrentImageIndex(newImageIdIndex);
+           }
+      } catch (vpError) {
+          // Catch errors during viewport retrieval or method call
+          console.error(`[${cornerstoneViewportId}] Error getting viewport/index in IMAGE_RENDERED handler:`, vpError);
+      }
+    };
+
+    // Use the IMAGE_RENDERED event from csCoreEnums
+    element.addEventListener(csCoreEnums.Events.IMAGE_RENDERED, handleImageRendered);
+
+    // Cleanup function
+    return () => {
+      if (element) {
+        element.removeEventListener(csCoreEnums.Events.IMAGE_RENDERED, handleImageRendered);
+      }
+    };
+  } catch (err) {
+    console.error('❌ Error setting up image rendered listener:', err);
+  }
+  // Dependencies include currentImageIndex to ensure the comparison inside the handler uses the latest state value
+}, [renderingEngineId, cornerstoneViewportId, localImageLoaded, viewport?.imageIds?.length, currentImageIndex]);
+
+  // --- Click Handler ---
   const handleClick = () => {
-    dispatch(setActiveViewport(viewportId));
+    if (!isActive) {
+        dispatch(setActiveViewport(viewportId));
+    }
   };
 
-  const getImageInfo = () => {
-    if (!viewport) return null;
+  // --- Image Info Getter ---
+  const getImageInfo = React.useCallback(() => { // Memoize if hierarchy/viewport don't change often
+    if (!viewport || !hierarchy?.hierarchy?.subjects) return null; // Added check for hierarchy structure
 
-    if (viewport.imageIds?.length > 0) {
-      const { subjectId, visitId, seriesId } = viewport;
-      try {
-        const subject = hierarchy.hierarchy.subjects[subjectId];
-        const visit = subject.visits[visitId];
-        const series = visit.series[seriesId];
-        const imageCount = Object.keys(series.sequences).length;
+    // Determine if it's a stack or single image based on loaded state
+    const isStack = viewport.imageIds && viewport.imageIds.length > 0;
+    const subjectId = viewport.subjectId;
+    const visitId = viewport.visitId;
+    const seriesId = viewport.seriesId;
+    const sequenceId = viewport.sequenceId; // Only relevant for single image?
 
+    try {
+      const subject = hierarchy.hierarchy.subjects[subjectId];
+      if (!subject) return null;
+      const visit = subject.visits[visitId];
+      if (!visit) return null;
+      const series = visit.series[seriesId];
+      if (!series) return null;
+
+      if (isStack) {
+        // Calculate imageCount based on the actual loaded imageIds length
+        const imageCount = viewport.imageIds.length;
         return {
           patientName: subject.name,
           patientId: subject.id,
@@ -295,66 +467,84 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
           seriesDescription: series.description,
           modality: series.modality,
           imageCount,
-          currentIndex: currentImageIndex + 1,
+          currentIndex: currentImageIndex + 1, // Display as 1-based index
         };
-      } catch {
-        return null;
+      } else if (viewport.imageId && sequenceId) { // Check sequenceId exists for single image case
+         const sequence = series.sequences?.[sequenceId]; // sequenceId might not always be present or correct
+         return {
+           patientName: subject.name,
+           patientId: subject.id,
+           studyDate: visit.date,
+           seriesDescription: series.description,
+           modality: series.modality,
+           // Use instance number from sequence if available, otherwise maybe default or hide
+           instanceNumber: sequence?.instanceNumber ?? 'N/A',
+         };
       }
-    } else if (viewport.imageId) {
-      const { subjectId, visitId, seriesId, sequenceId } = viewport;
-      try {
-        const subject = hierarchy.hierarchy.subjects[subjectId];
-        const visit = subject.visits[visitId];
-        const series = visit.series[seriesId];
-        const sequence = series.sequences[sequenceId];
+      return null; // No valid info could be determined
 
-        return {
-          patientName: subject.name,
-          patientId: subject.id,
-          studyDate: visit.date,
-          seriesDescription: series.description,
-          modality: series.modality,
-          instanceNumber: sequence.instanceNumber,
-        };
-      } catch {
-        return null;
-      }
+    } catch (error){
+        // console.error("Error getting image info:", error); // Log error during development
+        return null; // Gracefully return null if hierarchy traversal fails
     }
+  }, [viewport, hierarchy, currentImageIndex]); // Dependencies for memoization
 
-    return null;
-  };
-
+  // --- Render Loading/Error/Empty State ---
   const renderViewportContent = () => {
+    // Check based on viewport state from Redux first
     if (!viewport?.imageId && (!viewport?.imageIds || viewport.imageIds.length === 0)) {
-      return <Typography variant="body1">No image loaded</Typography>;
+        // Check if it's loading something else or just empty
+        if (viewport?.loading) {
+             return <CircularProgress color="primary" />;
+        }
+        return <Typography variant="caption" sx={{ color: 'grey.500' }}>No image selected</Typography>;
     }
 
-    if (viewport.loading && !localImageLoaded) {
+    // Now check local loading/error state managed during the load process
+    if (viewport.loading && !localImageLoaded && !localImageError) { // Show spinner only if loading hasn't completed/errored locally yet
       return <CircularProgress color="primary" />;
     }
 
-    if (viewport.error || localImageError) {
-      return <Typography variant="body1" color="error">Error: {viewport.error || localImageError}</Typography>;
+    if (localImageError) { // Prioritize local error state
+      return <Typography variant="caption" color="error">Error: {localImageError}</Typography>;
+    }
+    if (viewport.error && !localImageLoaded) { // Show Redux error if local didn't catch it and not loaded
+        return <Typography variant="caption" color="error">Error: {viewport.error}</Typography>;
     }
 
+
+    // If loaded or no error/loading state applies, render nothing here (image canvas is behind)
     return null;
   };
 
+  // --- Slider Handler ---
   const handleSliderChange = async (_event: Event, newValue: number | number[]) => {
     const index = Array.isArray(newValue) ? newValue[0] : newValue;
-  
+
+    // Prevent unnecessary updates if index hasn't changed
+    if (index === currentImageIndex) return;
+
     try {
       const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
-      const stackViewport = renderingEngine?.getViewport(cornerstoneViewportId) as any;
-      if (stackViewport && typeof stackViewport.setImageIndex === 'function') {
-        await stackViewport.setImageIndex(index);
+      const stackViewport = renderingEngine?.getViewport(cornerstoneViewportId) as cornerstone3D.Types.IStackViewport | undefined;
+
+      if (stackViewport && typeof stackViewport.setImageIdIndex === 'function') { // Check method exists
+        // Update cornerstone viewport
+        await stackViewport.setImageIdIndex(index);
+        // Update local state AFTER cornerstone succeeds (or optimistically before await)
         setCurrentImageIndex(index);
+        // No need to render here, setImageIdIndex should trigger cornerstone render event
+      } else {
+          console.warn("Slider change: Stack viewport or setImageIdIndex function not found.")
       }
     } catch (err) {
       console.error('Error setting image index from slider:', err);
     }
   };
-  
+
+
+  // --- Render Component ---
+  const imageInfo = getImageInfo(); // Get image info once per render
 
   return (
     <Paper
@@ -363,106 +553,112 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
         height: '100%',
         position: 'relative',
         overflow: 'hidden',
-        border: isActive ? '2px solid #007bff' : '2px solid transparent',
+        border: isActive ? '2px solid #007bff' : '2px solid grey', // Use grey for inactive border
         transition: 'border 0.2s ease-in-out',
+        backgroundColor: '#000', // Background for the Paper itself
       }}
       onClick={handleClick}
     >
+      {/* Cornerstone Element */}
       <Box
         ref={viewportRef}
         sx={{
           width: '100%',
           height: '100%',
-          backgroundColor: '#000',
-          color: '#fff',
+          backgroundColor: '#000', // Ensure div background is black
+          color: '#fff', // For text overlays like loading/error
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
-        data-viewport-id={viewportId}
+        data-viewport-id={viewportId} // For debugging/selection
       >
+        {/* Render Loading/Error/Empty states */}
         {renderViewportContent()}
       </Box>
-      {localImageLoaded && (
+
+      {/* Overlays - Conditionally render based on loaded state AND imageInfo */}
+      {localImageLoaded && imageInfo && (
         <>
+          {/* Top Left Overlay */}
           <Box
             sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              padding: '4px',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              color: '#fff',
-              fontSize: '12px',
+              position: 'absolute', top: 2, left: 4, pointerEvents: 'none',
+              backgroundColor: 'rgba(0, 0, 0, 0.6)', color: '#fff',
+              fontSize: '11px', padding: '1px 4px', borderRadius: 1,
+              whiteSpace: 'nowrap', maxWidth: 'calc(100% - 8px)', overflow: 'hidden', textOverflow: 'ellipsis',
             }}
           >
-            {getImageInfo()?.seriesDescription} ({getImageInfo()?.modality})
+            {imageInfo.seriesDescription} ({imageInfo.modality})
           </Box>
+
+          {/* Bottom Left Overlay */}
           <Box
             sx={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              padding: '4px',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              color: '#fff',
-              fontSize: '12px',
+              position: 'absolute', bottom: 2, left: 4, pointerEvents: 'none',
+              backgroundColor: 'rgba(0, 0, 0, 0.6)', color: '#fff',
+              fontSize: '11px', padding: '1px 4px', borderRadius: 1,
+              whiteSpace: 'nowrap', maxWidth: 'calc(100% - 8px)', overflow: 'hidden', textOverflow: 'ellipsis',
             }}
           >
-            Patient: {getImageInfo()?.patientName}
-            {viewport.imageIds && viewport.imageIds.length > 1
-              ? ` | Image: ${getImageInfo()?.currentIndex}/${getImageInfo()?.imageCount}`
-              : ` | Instance: ${getImageInfo()?.instanceNumber}`}
+            Pt: {imageInfo.patientName}
+            {/* Show Image index only if stack */}
+            {imageInfo.imageCount && imageInfo.imageCount > 1
+              ? ` | Im: ${imageInfo.currentIndex}/${imageInfo.imageCount}`
+              : imageInfo.instanceNumber // Show Instance if not stack (or if imageCount <= 1)
+                ? ` | Inst: ${imageInfo.instanceNumber}`
+                : ''}
           </Box>
         </>
       )}
-      {localImageLoaded && viewport.imageIds && viewport.imageIds.length > 1 && (
-  <Box
-    sx={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      px: 1,
-      zIndex: 10,
-      pointerEvents: 'none', // allow clicks to pass through unless inside slider
-    }}
-  >
-    <Box
-      sx={{
-        height: '80%',
-        pointerEvents: 'auto',
-        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-        borderRadius: 1,
-        px: 0.5,
-        py: 2,
-        display: 'flex',
-        alignItems: 'center',
-      }}
-    >
-      <Slider
-        key={`slider-${viewportId}-${viewport.imageIds?.length ?? 0}`}
-        orientation="vertical"
-        size="small"
-        min={0}
-        max={viewport.imageIds.length - 1}
-        value={currentImageIndex}
-        onChange={handleSliderChange}
-        aria-label="Image Slice"
-        sx={{
-          color: '#fff',
-          '& .MuiSlider-thumb': {
-            width: 10,
-            height: 10,
-          },
-        }}
-      />
-    </Box>
-  </Box>
-)}
 
+      {/* Vertical Slider - Conditionally render for stacks */}
+      {localImageLoaded && viewport.imageIds && viewport.imageIds.length > 1 && (
+        <Box
+          sx={{
+            position: 'absolute', top: '10%', /* Adjust vertical position */
+            right: 0, /* Position on the right */
+            height: '80%', /* Adjust height */
+            display: 'flex', alignItems: 'center',
+            px: 0.5, /* Padding horizontal */
+            zIndex: 10, // Ensure it's above the canvas
+            // pointerEvents: 'none', // Let clicks pass through the container Box
+          }}
+        >
+          <Box
+             sx={{
+               height: '100%',
+               pointerEvents: 'auto', // Enable pointer events for the slider itself
+               backgroundColor: 'rgba(0, 0, 0, 0.3)', // Semi-transparent background
+               borderRadius: 1,
+               px: 0.5, py: 1, display: 'flex', alignItems: 'center',
+             }}
+          >
+              <Slider
+                key={`slider-${viewportId}-${viewport.imageIds?.length ?? 0}`} // Helps React re-render if stack length changes
+                orientation="vertical"
+                size="small"
+                min={0}
+                max={viewport.imageIds.length - 1}
+                value={currentImageIndex}
+                onChange={handleSliderChange}
+                aria-label="Image Slice"
+                valueLabelDisplay="auto" // Show label on hover/drag
+                 valueLabelFormat={(value) => `${value + 1}`} // Display 1-based index in label
+                sx={{
+                  color: '#fff',
+                  '& .MuiSlider-thumb': { width: 12, height: 12, backgroundColor: '#fff' }, // Make thumb white
+                  '& .MuiSlider-rail': { opacity: 0.4 },
+                  '& .MuiSlider-track': { border: 'none' },
+                  // Ensure clicks on the track work as expected
+                  '& .MuiSlider-track, & .MuiSlider-rail': {
+                      pointerEvents: 'auto',
+                  }
+                }}
+              />
+          </Box>
+        </Box>
+      )}
     </Paper>
   );
 };

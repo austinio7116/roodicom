@@ -100,7 +100,6 @@ const App: React.FC = () => {
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
         <AppContent />
-        <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
     </Provider>
   );
