@@ -2,6 +2,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export type ToolName = 
   | 'WindowLevel' 
+  | 'StackScroll'
   | 'Zoom' 
   | 'Pan' 
   | 'Length' 

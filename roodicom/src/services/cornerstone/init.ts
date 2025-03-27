@@ -7,7 +7,29 @@ export async function initializeCornerstone(): Promise<void> {
   try {
     await cornerstone3D.init();
     cornerstoneTools.init(); // Usually synchronous
+    // Register tools
+    const { addTool } = cornerstoneTools;
 
+    const toolsToRegister = [
+      cornerstoneTools.WindowLevelTool,
+      cornerstoneTools.PanTool,
+      cornerstoneTools.ZoomTool,
+      cornerstoneTools.LengthTool,
+      cornerstoneTools.AngleTool,
+      cornerstoneTools.RectangleROITool,
+      cornerstoneTools.EllipticalROITool,
+      cornerstoneTools.StackScrollTool
+    ];
+
+    toolsToRegister.forEach((tool) => {
+      if (tool) {
+        addTool(tool);
+        console.log(`Registered tool: ${tool.toolName}`);
+      } else {
+        console.warn('Tool is undefined and was not registered.');
+      }
+    });
+    
     try {
       // Use 'as any' because types seem faulty for external/configure
       const waLoader = cornerstoneDICOMImageLoader as any;

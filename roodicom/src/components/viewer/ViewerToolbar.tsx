@@ -23,6 +23,7 @@ import RotateRightIcon from '@mui/icons-material/RotateRight';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import InvertColorsIcon from '@mui/icons-material/InvertColors';
 import RestoreIcon from '@mui/icons-material/Restore';
+import SwapVertIcon from '@mui/icons-material/SwapVert';
 import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import { setActiveTool, ToolName } from '../../store/slices/toolsSlice';
 import { setLayout } from '../../store/slices/viewportsSlice';
@@ -80,6 +81,15 @@ const ViewerToolbar: React.FC = () => {
             <ContrastIcon />
           </IconButton>
         </Tooltip>
+
+        <Tooltip title="Stack Scroll">
+        <IconButton
+          color={activeTool === 'StackScroll' ? 'primary' : 'default'}
+          onClick={() => handleToolChange('StackScroll')}
+        >
+          <SwapVertIcon />
+        </IconButton>
+      </Tooltip>
         
         <Tooltip title="Pan">
           <IconButton 
