@@ -112,7 +112,7 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
           });
 
           toolGroup.setToolPassive('StackScroll'); // Allow StackScroll via wheel even if another tool is active
-
+          cornerstoneTools.scroll
           // Set StackScroll active for MouseWheel interaction
           toolGroup.setToolActive('StackScroll', {
             bindings: [
@@ -175,99 +175,129 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
     };
   }, [viewportId, cornerstoneViewportId, renderingEngineId, toolGroupId]); // Stable dependencies
 
-// --- Active Tool Effect ---
+// --- Updated Active Tool Effect ---
 useEffect(() => {
   const toolGroup = ToolGroupManager.getToolGroup(toolGroupId);
+
   // Only proceed if the tool group exists AND this viewport is the active one
   if (!toolGroup || !isActive) {
-      return;
+    // If not active, potentially set all tools to passive or a default state
+    // depending on desired behavior for inactive viewports.
+    // For now, just return to avoid changing tool modes in inactive viewports.
+    return;
   }
+
+  console.log(`[${viewportId}] Active Tool Effect Triggered. Active Tool: ${activeTool}, IsActive: ${isActive}`);
 
   // Define tools usually activated by Primary mouse button
   const primaryBindingTools = [
-      'WindowLevel', 'Zoom', 'Pan', 'Length', 'Angle', 'RectangleROI', 'EllipticalROI'
+    'WindowLevel', 'Zoom', 'Pan', 'Length', 'Angle', 'RectangleROI', 'EllipticalROI'
+    // Add any other tools intended for primary mouse interaction here
   ];
 
   // --- Step 1: Set ALL relevant tools passive initially ---
-  // This clears previous bindings before setting new ones.
-  [...primaryBindingTools, 'StackScroll'].forEach(toolName => {
-      if (toolGroup.hasTool(toolName)) {
-          toolGroup.setToolPassive(toolName);
+  // This clears previous bindings/modes before setting new ones for the active viewport.
+  // Include StackScroll in this list to ensure its mode is reset correctly each time.
+  const toolsToReset = [...primaryBindingTools, 'StackScroll'];
+  console.log(`[${viewportId}] Resetting modes for tools:`, toolsToReset);
+  toolsToReset.forEach(toolName => {
+    if (toolGroup.hasTool(toolName)) {
+      try {
+        toolGroup.setToolPassive(toolName);
+      } catch (resetError) {
+        // It might be acceptable for this to fail if the tool is already passive, but log it.
+        console.warn(`[${viewportId}] Could not set tool ${toolName} to passive during reset:`, resetError);
       }
+    }
   });
 
   // --- Step 2: Activate the PRIMARY tool (and Wheel if StackScroll) ---
+
   if (activeTool && primaryBindingTools.includes(activeTool) && toolGroup.hasTool(activeTool)) {
-      // --- Step 2a: Activate standard primary tools (WL, Pan, Zoom, etc.) ---
-      try {
-          toolGroup.setToolActive(activeTool, {
-              bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
-              mode: 'Active', // Be explicit with mode
-              overwrite: true // Ensure this binding takes precedence
-          });
-      } catch (error) {
-          console.warn(`[${viewportId}] Failed to activate primary tool ${activeTool}:`, error);
-      }
+    // --- Step 2a: Activate standard primary tools (WL, Pan, Zoom, Measurements, etc.) ---
+    console.log(`[${viewportId}] Activating primary tool: ${activeTool}`);
+    try {
+      toolGroup.setToolActive(activeTool, {
+        bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
+        mode: csToolsEnums.ToolModes.Active, // Explicitly set Active mode
+        // overwrite: true // Generally implied for setToolActive, but can be explicit if needed
+      });
+    } catch (error) {
+      console.error(`[${viewportId}] Failed to activate primary tool ${activeTool}:`, error);
+    }
 
   } else if (activeTool === 'StackScroll') {
-      // --- Step 2b: Activate StackScroll for Primary AND Wheel --- // MODIFIED LOGIC
-      if (toolGroup.hasTool('StackScroll')) {
-          try {
-              toolGroup.setToolActive('StackScroll', {
-                  bindings: [ // Provide both bindings explicitly
-                      { mouseButton: csToolsEnums.MouseBindings.Primary },
-                      { type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding
-                  ],
-                  mode: 'Active', // Set mode to Active
-                  overwrite: true // Ensure these bindings take precedence and replace any others for StackScroll
-              });
-          } catch (error) {
-              console.error(`[${viewportId}] Failed to activate StackScroll for Primary and Wheel:`, error);
-          }
-      } else {
-          console.warn(`[${viewportId}] StackScroll tool not found when selected.`);
-      }
+    // --- Step 2b: Activate StackScroll for Primary AND Wheel ---
+    if (toolGroup.hasTool('StackScroll')) {
+        console.log(`[${viewportId}] Activating StackScroll for Primary Mouse and Wheel.`);
+        try {
+            toolGroup.setToolActive('StackScroll', {
+                bindings: [ // Provide both bindings explicitly
+                    { mouseButton: csToolsEnums.MouseBindings.Primary },
+                    // Cast might be needed depending on strictness/version
+                    { type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding
+                ],
+                mode: csToolsEnums.ToolModes.Active, // Set mode to Active
+                // overwrite: true // Ensure these bindings take precedence
+            });
+        } catch (error) {
+            console.error(`[${viewportId}] Failed to activate StackScroll for Primary and Wheel:`, error);
+        }
+    } else {
+        console.warn(`[${viewportId}] StackScroll tool not found when selected.`);
+    }
 
   } else {
-      // --- Step 2c: Fallback primary tool ---
-      const fallbackPrimaryTool = 'WindowLevel';
-      if (toolGroup.hasTool(fallbackPrimaryTool)) {
-          try {
-              
-              toolGroup.setToolActive(fallbackPrimaryTool, {
-                  bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
-                  mode: 'Active',
-                  overwrite: true
-              });
-          } catch (error) {
-              console.warn(`[${viewportId}] Failed to activate fallback primary tool ${fallbackPrimaryTool}:`, error);
-          }
-      } else {
-          console.warn(`[${viewportId}] Fallback primary tool ${fallbackPrimaryTool} not found.`);
-      }
+    // --- Step 2c: Fallback primary tool (e.g., WindowLevel if no specific tool is active) ---
+    const fallbackPrimaryTool = 'WindowLevel'; // Or choose another default like 'Pan'
+    if (toolGroup.hasTool(fallbackPrimaryTool)) {
+        console.log(`[${viewportId}] No specific tool active or tool not found. Activating fallback: ${fallbackPrimaryTool}`);
+        try {
+            toolGroup.setToolActive(fallbackPrimaryTool, {
+                bindings: [{ mouseButton: csToolsEnums.MouseBindings.Primary }],
+                mode: csToolsEnums.ToolModes.Active,
+                // overwrite: true
+            });
+        } catch (error) {
+            console.error(`[${viewportId}] Failed to activate fallback primary tool ${fallbackPrimaryTool}:`, error);
+        }
+    } else {
+        console.warn(`[${viewportId}] Fallback primary tool ${fallbackPrimaryTool} not found.`);
+    }
   }
 
-  // --- Step 3: Ensure Wheel Scroll if StackScroll is NOT the primary tool --- // MODIFIED LOGIC
-  // If another tool is primary (Step 2a or 2c), StackScroll should still respond *only* to the wheel.
-  // Step 2b handles the case where StackScroll IS the primary tool.
+  // --- Step 3: Ensure Wheel Scroll using PASSIVE mode if StackScroll is NOT the primary tool ---
+  // This allows wheel scrolling *in the background* while another tool is active via the primary mouse button.
   if (activeTool !== 'StackScroll' && toolGroup.hasTool('StackScroll')) {
-       try {
-           // Activate ONLY for wheel. Explicit mode might be important.
-           toolGroup.setToolActive('StackScroll', {
-               bindings: [{ type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding],
-               mode: 'Active', // Let's try 'Active' mode for the wheel binding too
-               // NO overwrite: true here - we don't want to disrupt the primary tool's binding.
-           });
-       } catch (error) {
-           console.error(`[${viewportId}] Failed to set StackScroll for MouseWheel (non-primary case):`, error);
-       }
+      console.log(`[${viewportId}] Primary tool is ${activeTool || 'fallback'}. Setting StackScroll to Passive for MouseWheel.`);
+      try {
+          // Activate ONLY for wheel using PASSIVE mode.
+          toolGroup.setToolActive('StackScroll', {
+              bindings: [{ type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding],
+              // *** USE PASSIVE MODE HERE ***
+              mode: csToolsEnums.ToolModes.Passive,
+          });
+      } catch (error) {
+          console.error(`[${viewportId}] Failed to set StackScroll Passive for MouseWheel:`, error);
+      }
   } else if (activeTool !== 'StackScroll' && !toolGroup.hasTool('StackScroll')) {
-       // Log if StackScroll tool isn't found and wheel won't work
-       console.warn(`[${viewportId}] StackScroll tool not found. Wheel scroll disabled.`);
+      // Log if StackScroll tool isn't found and wheel won't work
+      console.warn(`[${viewportId}] StackScroll tool not found. Wheel scroll disabled when other tools are active.`);
   }
-   // If activeTool IS 'StackScroll', Step 2b already handled its wheel binding along with the primary one.
+  // If activeTool IS 'StackScroll', Step 2b already handled its wheel binding (along with the primary mouse).
 
-}, [activeTool, isActive, toolGroupId, viewportId]); // Dependencies
+  // Optional: Log final state for debugging
+  // const stackScrollInstance = toolGroup.getToolInstance('StackScroll');
+  // if (stackScrollInstance) {
+  //   console.log(`[${viewportId}] Final StackScroll state: mode=${stackScrollInstance.mode}, bindings=`, stackScrollInstance.bindings);
+  // }
+  // const primaryToolInstance = activeTool && toolGroup.getToolInstance(activeTool);
+  // if (primaryToolInstance) {
+  //   console.log(`[${viewportId}] Final ${activeTool} state: mode=${primaryToolInstance.mode}, bindings=`, primaryToolInstance.bindings);
+  // }
+
+
+}, [activeTool, isActive, toolGroupId, viewport?.imageId, viewport?.imageIds, viewportId]); // Dependencies: Rerun when the active tool, viewport active state, or IDs change.
 
 
   // --- Image Loading Effect ---
