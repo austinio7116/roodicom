@@ -20,10 +20,10 @@ interface UiState {
 
 const initialState: UiState = {
   sidebarOpen: true,
-  activeTab: 'hierarchy',
+  activeTab: 'files',
   viewMode: 'single',
   viewLayout: '1x1',
-  darkMode: false,
+  darkMode: true,
   loading: false,
   notification: {
     show: false,

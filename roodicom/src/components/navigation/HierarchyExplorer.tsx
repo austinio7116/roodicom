@@ -14,7 +14,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PersonIcon from '@mui/icons-material/Person';
 import EventIcon from '@mui/icons-material/Event';
-import ViewInArIcon from '@mui/icons-material/ViewInAr';
 import ImageIcon from '@mui/icons-material/Image';
 import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import {
@@ -46,9 +45,21 @@ interface ViewportsState {
   };
 }
 
+import ViewInArIcon from '@mui/icons-material/ViewInAr';
+
+// Placeholder for the thumbnail component - we'll implement this later
+const SeriesThumbnail: React.FC<{ subjectId: string; visitId: string; seriesId: string }> = ({ seriesId }) => {
+  // TODO: Implement Cornerstone thumbnail rendering
+  return (
+    <Box sx={{ width: 40, height: 40, bgcolor: 'grey.300', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <ViewInArIcon color="primary" />
+    </Box>
+  );
+};
+
 const HierarchyExplorer: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { hierarchy, loading, activeSubjectId, activeVisitId, activeSeriesId, activeSequenceId } =
+  const { hierarchy, loading, activeSubjectId, activeVisitId, activeSeriesId } = // Removed activeSequenceId
     useAppSelector(state => state.hierarchy as HierarchyState);
   const activeViewportId = useAppSelector(state =>
     (state.viewports as ViewportsState).activeViewportId
@@ -57,7 +68,7 @@ const HierarchyExplorer: React.FC = () => {
   // State to track expanded items
   const [expandedSubjects, setExpandedSubjects] = React.useState<Record<string, boolean>>({});
   const [expandedVisits, setExpandedVisits] = React.useState<Record<string, boolean>>({});
-  const [expandedSeries, setExpandedSeries] = React.useState<Record<string, boolean>>({});
+  // Removed expandedSeries state
   
   // Auto-expand the first subject when hierarchy is loaded
   useEffect(() => {
@@ -71,12 +82,7 @@ const HierarchyExplorer: React.FC = () => {
         const firstVisitId = Object.keys(subject.visits)[0];
         setExpandedVisits({ [`${firstSubjectId}-${firstVisitId}`]: true });
         
-        // If there's only one visit, also expand its first series
-        const visit = subject.visits[firstVisitId];
-        if (Object.keys(visit.series).length > 0) {
-          const firstSeriesId = Object.keys(visit.series)[0];
-          setExpandedSeries({ [`${firstSubjectId}-${firstVisitId}-${firstSeriesId}`]: true });
-        }
+        // Removed auto-expansion logic for series
       }
     }
   }, [loading, hierarchy, expandedSubjects]);
@@ -103,15 +109,8 @@ const HierarchyExplorer: React.FC = () => {
     dispatch(setActiveVisit(visitId));
     dispatch(setActiveSeries(seriesId));
     
-    // Toggle the expanded state
-    const newExpandedState = !expandedSeries[`${subjectId}-${visitId}-${seriesId}`];
-    setExpandedSeries({
-      ...expandedSeries,
-      [`${subjectId}-${visitId}-${seriesId}`]: newExpandedState
-    });
-    
-    // If we're collapsing the series, load the entire series as a stack
-    if (!newExpandedState && activeViewportId) {
+    // Load the series stack directly when clicked
+    if (activeViewportId) {
       try {
         // Get the series from the hierarchy
         const subject = hierarchy.subjects[subjectId];
@@ -190,12 +189,12 @@ const HierarchyExplorer: React.FC = () => {
             <ListItemIcon>
               <PersonIcon color="primary" />
             </ListItemIcon>
-            <ListItemText 
+            <ListItemText
               primary={
-                <Typography variant="body2">
+                <Typography variant="caption">
                   {subject.name} ({subjectId})
                 </Typography>
-              } 
+              }
             />
             {expandedSubjects[subjectId] ? <ExpandMoreIcon /> : <ChevronRightIcon />}
           </ListItemButton>
@@ -222,13 +221,8 @@ const HierarchyExplorer: React.FC = () => {
             </ListItemIcon>
             <ListItemText
               primary={
-                <Typography variant="body2">
+                <Typography variant="caption">
                   Study: {visit.date}
-                </Typography>
-              }
-              secondary={
-                <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
-                  {visitId.substring(0, 20)}...
                 </Typography>
               }
             />
@@ -253,75 +247,20 @@ const HierarchyExplorer: React.FC = () => {
             selected={activeSubjectId === subjectId && activeVisitId === visitId && activeSeriesId === seriesId}
           >
             <ListItemIcon>
-              <ViewInArIcon color="primary" />
+              <SeriesThumbnail seriesId={seriesId} subjectId={subjectId} visitId={visitId} />
             </ListItemIcon>
             <ListItemText
               primary={
-                <Typography variant="body2">
+                <Typography variant="caption">
                   {series.description} ({series.modality})
                 </Typography>
               }
-              secondary={
-                <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
-                  {seriesId.substring(0, 20)}...
-                </Typography>
-              }
             />
-            {expandedSeries[`${subjectId}-${visitId}-${seriesId}`] ? <ExpandMoreIcon /> : <ChevronRightIcon />}
           </ListItemButton>
+          
         </ListItem>
-        <Collapse in={expandedSeries[`${subjectId}-${visitId}-${seriesId}`]} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding sx={{ pl: 4 }}>
-            {renderSequences(series, subjectId, visitId, seriesId)}
-          </List>
-        </Collapse>
       </React.Fragment>
     ));
-  };
-  
-  const renderSequences = (series: Series, subjectId: string, visitId: string, seriesId: string) => {
-    return Object.entries(series.sequences).map(([sequenceId, sequence]) => {
-      // Make sure we have a valid imageId
-      const imageId = sequence.imageId || '';
-      if (!imageId) {
-        console.warn(`Sequence ${sequenceId} has no imageId`);
-        return null;
-      }
-      
-      return (
-        <ListItem
-          key={sequenceId}
-          disablePadding
-        >
-          <ListItemButton
-            onClick={() => handleSequenceClick(
-              subjectId,
-              visitId,
-              seriesId,
-              sequenceId,
-              imageId
-            )}
-            selected={
-              activeSubjectId === subjectId &&
-              activeVisitId === visitId &&
-              activeSeriesId === seriesId &&
-              activeSequenceId === sequenceId
-            }
-          >
-            <ListItemIcon>
-              <ImageIcon color="primary" />
-            </ListItemIcon>
-            <ListItemText
-              primary={
-                <Typography variant="body2">
-                  Instance: {sequence.instanceNumber}
-                </Typography>
-              }
-            />
-          </ListItemButton>
-        </ListItem>
-      );
-    }).filter(item => item !== null);
   };
   
   if (loading) {

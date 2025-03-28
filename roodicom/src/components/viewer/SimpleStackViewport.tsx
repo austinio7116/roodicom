@@ -582,7 +582,7 @@ useEffect(() => {
         height: '100%',
         position: 'relative',
         overflow: 'hidden',
-        border: isActive ? '2px solid #007bff' : '2px solid grey', // Use grey for inactive border
+        border: isActive ? '2px solid #29b7c0' : '2px solid grey', // Use grey for inactive border
         transition: 'border 0.2s ease-in-out',
         backgroundColor: '#000', // Background for the Paper itself
       }}

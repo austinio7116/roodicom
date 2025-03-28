@@ -77,10 +77,10 @@ const AppContent: React.FC = () => {
         palette: {
           mode: darkMode ? 'dark' : 'light',
           primary: {
-            main: '#007bff',
+            main: '#29b7c0',
           },
           secondary: {
-            main: '#6c757d',
+            main: '#f68633',
           },
         },
       }),
