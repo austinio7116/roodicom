@@ -112,7 +112,6 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
           });
 
           toolGroup.setToolPassive('StackScroll'); // Allow StackScroll via wheel even if another tool is active
-          cornerstoneTools.scroll
           // Set StackScroll active for MouseWheel interaction
           toolGroup.setToolActive('StackScroll', {
             bindings: [
