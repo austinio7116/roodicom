@@ -22,6 +22,7 @@ import {
   setActiveSeries,
   setActiveSequence
 } from '../../store/slices/hierarchySlice';
+import SeriesThumbnail from '../common/SeriesThumbnail'; // Adjust path as needed
 import { loadImage, loadStack } from '../../store/slices/viewportsSlice';
 import { Subject, Visit, Series, Sequence, DicomHierarchy } from '../../types/hierarchy';
 
@@ -44,18 +45,6 @@ interface ViewportsState {
     columns: number;
   };
 }
-
-import ViewInArIcon from '@mui/icons-material/ViewInAr';
-
-// Placeholder for the thumbnail component - we'll implement this later
-const SeriesThumbnail: React.FC<{ subjectId: string; visitId: string; seriesId: string }> = ({ seriesId }) => {
-  // TODO: Implement Cornerstone thumbnail rendering
-  return (
-    <Box sx={{ width: 40, height: 40, bgcolor: 'grey.300', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <ViewInArIcon color="primary" />
-    </Box>
-  );
-};
 
 const HierarchyExplorer: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -239,29 +228,45 @@ const HierarchyExplorer: React.FC = () => {
   };
   
   const renderSeries = (visit: Visit, subjectId: string, visitId: string) => {
-    return Object.entries(visit.series).map(([seriesId, series]) => (
-      <React.Fragment key={seriesId}>
-        <ListItem disablePadding>
-          <ListItemButton 
-            onClick={() => handleSeriesClick(subjectId, visitId, seriesId)}
-            selected={activeSubjectId === subjectId && activeVisitId === visitId && activeSeriesId === seriesId}
-          >
-            <ListItemIcon>
-              <SeriesThumbnail seriesId={seriesId} subjectId={subjectId} visitId={visitId} />
-            </ListItemIcon>
-            <ListItemText
-              primary={
-                <Typography variant="caption">
-                  {series.description} ({series.modality})
-                </Typography>
+    return Object.entries(visit.series).map(([seriesId, series]) => {
+      const sequences = Object.values(series.sequences) as Sequence[];
+  
+      // Sort by instance number
+      sequences.sort((a, b) => a.instanceNumber - b.instanceNumber);
+  
+      // Pick the center slice for thumbnail
+      const centerIndex = Math.floor(sequences.length / 2);
+      const imageId = sequences[centerIndex]?.imageId;
+  
+      return (
+        <React.Fragment key={seriesId}>
+          <ListItem disablePadding>
+            <ListItemButton 
+              onClick={() => handleSeriesClick(subjectId, visitId, seriesId)}
+              selected={
+                activeSubjectId === subjectId &&
+                activeVisitId === visitId &&
+                activeSeriesId === seriesId
               }
-            />
-          </ListItemButton>
-          
-        </ListItem>
-      </React.Fragment>
-    ));
+            >
+              <ListItemIcon>
+                <SeriesThumbnail imageId={imageId} />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  <Typography variant="caption">
+                    {series.description} ({series.modality})
+                  </Typography>
+                }
+              />
+            </ListItemButton>
+          </ListItem>
+        </React.Fragment>
+      );
+    });
   };
+  
+  
   
   if (loading) {
     return (

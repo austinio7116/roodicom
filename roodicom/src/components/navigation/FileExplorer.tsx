@@ -360,16 +360,22 @@ const FileExplorer: React.FC = () => {
       
       {!rootDirectory && !loading && (
         <Box sx={{ p: 2, textAlign: 'center' }}>
-          <Typography variant="body1">
-            Select a directory to view DICOM files
+          <Typography 
+            variant="body2" 
+            sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+          >
+            Select a directory to view DICOM files.
           </Typography>
         </Box>
       )}
       
       {rootDirectory && !loading && files.length === 0 && (
         <Box sx={{ p: 2, textAlign: 'center' }}>
-          <Typography variant="body1">
-            No DICOM files found in the selected directory
+          <Typography 
+            variant="body2" 
+            sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+          >
+            No DICOM files found in the selected directory.
           </Typography>
         </Box>
       )}

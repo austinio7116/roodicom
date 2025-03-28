@@ -339,7 +339,7 @@ useEffect(() => {
             if (imageIdsToLoad && imageIdsToLoad.length > 0) {
                 await stackViewport.setStack(imageIdsToLoad, 0); // Start at index 0
                 // Note: cornerstoneTools might automatically handle voi/lut based on metadata
-                // stackViewport.resetCamera(); // Optionally reset camera
+                stackViewport.resetCamera(); // Optionally reset camera
                 // stackViewport.render(); // setStack usually triggers render, but explicit call ensures it
                 renderingEngine.renderViewports([cornerstoneViewportId]); // Render this specific viewport
 
@@ -351,7 +351,7 @@ useEffect(() => {
             } else if (imageIdToLoad) {
                 // Use setStack with a single image ID array
                 await stackViewport.setStack([imageIdToLoad], 0);
-                // stackViewport.resetCamera(); // Optionally reset camera
+                stackViewport.resetCamera(); // Optionally reset camera
                 // stackViewport.render();
                 renderingEngine.renderViewports([cornerstoneViewportId]);
 
@@ -570,6 +570,33 @@ useEffect(() => {
       console.error('Error setting image index from slider:', err);
     }
   };
+
+  useEffect(() => {
+    if (!localImageLoaded) return;
+  
+    const handleResize = () => {
+      try {
+        const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+        const viewport = renderingEngine.getViewport(cornerstoneViewportId);
+        if (viewport) {
+          viewport.resize(true); // true = force immediate render
+        }
+      } catch (e) {
+        console.warn(`Viewport ${cornerstoneViewportId} failed to resize on window change`, e);
+      }
+    };
+  
+    // Resize on window change
+    window.addEventListener('resize', handleResize);
+  
+    // Resize on mount or layout change
+    handleResize();
+  
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [localImageLoaded, renderingEngineId, cornerstoneViewportId]);
+  
 
 
   // --- Render Component ---
