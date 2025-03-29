@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  AppBar, 
-  Toolbar, 
-  IconButton, 
-  Tooltip, 
-  Divider, 
-  Select, 
-  MenuItem, 
-  FormControl, 
+import {
+  AppBar,
+  Toolbar,
+  IconButton,
+  Tooltip,
+  Divider,
+  Select,
+  MenuItem,
+  FormControl,
   InputLabel,
   Box,
   SelectChangeEvent
@@ -25,9 +25,14 @@ import RotateLeftIcon from '@mui/icons-material/RotateLeft';
 import InvertColorsIcon from '@mui/icons-material/InvertColors';
 import RestoreIcon from '@mui/icons-material/Restore';
 import SwapVertIcon from '@mui/icons-material/SwapVert';
+import ViewInArIcon from '@mui/icons-material/ViewInAr';
+import InfoIcon from '@mui/icons-material/Info';
 import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import { setActiveTool, ToolName } from '../../store/slices/toolsSlice';
 import { setLayout } from '../../store/slices/viewportsSlice';
+
+// Define orientation type
+export type OrientationType = 'AXIAL' | 'SAGITTAL' | 'CORONAL';
 
 // Define props for the new handlers
 interface ViewerToolbarProps {
@@ -35,6 +40,9 @@ interface ViewerToolbarProps {
   onRotateRight: () => void;
   onInvert: () => void;
   onReset: () => void;
+  onMPROrientationChange: (orientation: OrientationType) => void;
+  currentOrientation?: OrientationType; // Add current orientation prop
+  onShowDicomMetadata: () => void; // Add handler for DICOM metadata viewer
   // Include other props if needed, e.g. if layout/activeTool aren't solely from Redux
 }
 
@@ -43,7 +51,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   onRotateLeft,
   onRotateRight,
   onInvert,
-  onReset
+  onReset,
+  onMPROrientationChange,
+  currentOrientation = 'AXIAL', // Default to AXIAL if not provided
+  onShowDicomMetadata
 }) => {
   const dispatch = useAppDispatch();
   const activeTool = useAppSelector((state) => state.tools.activeTool);
@@ -188,6 +199,37 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
             <RestoreIcon />
           </IconButton>
         </Tooltip>
+        
+        <Tooltip title="DICOM Metadata">
+          <IconButton onClick={onShowDicomMetadata}>
+            <InfoIcon />
+          </IconButton>
+        </Tooltip>
+        
+        <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+        
+        {/* MPR Orientation Dropdown */}
+        <FormControl variant="outlined" size="small" sx={{ minWidth: 120, mx: 1 }}>
+          <InputLabel id="mpr-orientation-label">MPR</InputLabel>
+          <Select
+            labelId="mpr-orientation-label"
+            id="mpr-orientation-select"
+            value={currentOrientation}
+            onChange={(e: SelectChangeEvent<string>) =>
+              onMPROrientationChange(e.target.value as OrientationType)
+            }
+            label="MPR"
+            startAdornment={
+              <Box sx={{ display: 'flex', alignItems: 'center', mr: 0.5 }}>
+                <ViewInArIcon fontSize="small" />
+              </Box>
+            }
+          >
+            <MenuItem value="AXIAL">Axial</MenuItem>
+            <MenuItem value="SAGITTAL">Sagittal</MenuItem>
+            <MenuItem value="CORONAL">Coronal</MenuItem>
+          </Select>
+        </FormControl>
         
         <Box sx={{ flexGrow: 1 }} />
         

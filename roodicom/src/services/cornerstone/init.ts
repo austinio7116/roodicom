@@ -3,6 +3,25 @@ import * as cornerstoneTools from '@cornerstonejs/tools';
 import dicomParser from 'dicom-parser';
 import cornerstoneDICOMImageLoader from '@cornerstonejs/dicom-image-loader';
 
+// Extend Window interface to include our custom properties
+declare global {
+  interface Window {
+    metadataProvider: {
+      [key: string]: {
+        imagePositionPatient?: number[];
+        imageOrientationPatient?: number[];
+        pixelSpacing?: number[];
+        sliceThickness?: number;
+        rows?: number;
+        columns?: number;
+        [key: string]: any;
+      };
+    };
+    cornerstoneInitialized?: boolean;
+    cornerstoneFileManager?: any;
+  }
+}
+
 export async function initializeCornerstone(): Promise<void> {
   try {
     await cornerstone3D.init();
@@ -28,6 +47,18 @@ export async function initializeCornerstone(): Promise<void> {
         console.warn('Tool is undefined and was not registered.');
       }
     });
+    
+    // Initialize the global metadataProvider object
+    window.metadataProvider = {};
+    
+    // Register a global metadata provider with Cornerstone
+    cornerstone3D.metaData.addProvider((type: string, imageId: string) => {
+      if (window.metadataProvider && window.metadataProvider[imageId]) {
+        return window.metadataProvider[imageId][type];
+      }
+    });
+    
+    console.log('Global metadata provider registered');
     
     try {
       // Use 'as any' because types seem faulty for external/configure
@@ -98,7 +129,7 @@ export async function initializeCornerstone(): Promise<void> {
  * Helper function to add a file to the Cornerstone file manager and get an imageId
  * This replaces the custom loader with the built-in WADO URI loader
  */
-export async function addFileToCornerstone(file: File): Promise<string> {
+export async function addFileToCornerstone(file: File, metadata?: any): Promise<string> {
   const waLoader = cornerstoneDICOMImageLoader as any;
 
   if (!waLoader.wadouri || !waLoader.wadouri.fileManager) {
@@ -109,6 +140,36 @@ export async function addFileToCornerstone(file: File): Promise<string> {
   // File UID returned (contains unwanted "dicomfile:" prefix)
   const imageId = waLoader.wadouri.fileManager.add(file);
 
+  // Register metadata with Cornerstone if provided
+  if (metadata && cornerstone3D.metaData) {
+    try {
+      // Create a metadata object in the format Cornerstone expects
+      const metadataObject = {
+        imagePositionPatient: metadata.imagePositionPatient,
+        imageOrientationPatient: metadata.imageOrientationPatient,
+        pixelSpacing: metadata.pixelSpacing,
+        sliceThickness: metadata.sliceThickness,
+        rows: 512, // Default value, adjust if you have actual metadata
+        columns: 512, // Default value, adjust if you have actual metadata
+      };
+      
+      // Store the metadata in the global object that can be accessed by Cornerstone
+      window.metadataProvider[imageId] = metadataObject;
+      
+      console.log(`Registered metadata for ${imageId}:`, {
+        imagePositionPatient: metadata.imagePositionPatient ? 'Yes' : 'No',
+        imageOrientationPatient: metadata.imageOrientationPatient ? 'Yes' : 'No',
+        pixelSpacing: metadata.pixelSpacing ? 'Yes' : 'No',
+        sliceThickness: metadata.sliceThickness ? 'Yes' : 'No'
+      });
+      
+      // Verify the metadata is accessible
+      const testPosition = cornerstone3D.metaData.get('imagePositionPatient', imageId);
+      console.log(`Verification - Can access imagePositionPatient: ${testPosition ? 'Yes' : 'No'}`);
+    } catch (error) {
+      console.error('Error registering metadata with Cornerstone:', error);
+    }
+  }
 
   return imageId;
 }

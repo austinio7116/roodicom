@@ -105,6 +105,51 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
     // Extract instance information
     metadata.instanceNumber = getNumber('x00200013', 1); // Instance Number
     
+    // Extract spatial metadata for MPR
+    try {
+      // Image Position (Patient)
+      const imagePositionElement = dataSet.elements['x00200032'];
+      if (imagePositionElement) {
+        const positionString = dataSet.string('x00200032');
+        if (positionString) {
+          metadata.imagePositionPatient = positionString.split('\\').map(Number);
+          console.log(`Extracted imagePositionPatient: ${metadata.imagePositionPatient}`);
+        }
+      }
+      
+      // Image Orientation (Patient)
+      const imageOrientationElement = dataSet.elements['x00200037'];
+      if (imageOrientationElement) {
+        const orientationString = dataSet.string('x00200037');
+        if (orientationString) {
+          metadata.imageOrientationPatient = orientationString.split('\\').map(Number);
+          console.log(`Extracted imageOrientationPatient: ${metadata.imageOrientationPatient}`);
+        }
+      }
+      
+      // Pixel Spacing
+      const pixelSpacingElement = dataSet.elements['x00280030'];
+      if (pixelSpacingElement) {
+        const spacingString = dataSet.string('x00280030');
+        if (spacingString) {
+          metadata.pixelSpacing = spacingString.split('\\').map(Number);
+          console.log(`Extracted pixelSpacing: ${metadata.pixelSpacing}`);
+        }
+      }
+      
+      // Slice Thickness
+      const sliceThicknessElement = dataSet.elements['x00180050'];
+      if (sliceThicknessElement) {
+        const thicknessString = dataSet.string('x00180050');
+        if (thicknessString) {
+          metadata.sliceThickness = parseFloat(thicknessString);
+          console.log(`Extracted sliceThickness: ${metadata.sliceThickness}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting spatial metadata:', error);
+    }
+    
     // Format the study date if it's in DICOM format (YYYYMMDD)
     if (metadata.studyDate.match(/^[0-9]{8}$/)) {
       const year = metadata.studyDate.substring(0, 4);
@@ -246,10 +291,12 @@ const FileExplorer: React.FC = () => {
                 const metadata = await extractDicomMetadata(file, filePath);
                 
                 // Add the file to the Cornerstone file manager and get an imageId
-                // CORRECT: directly returns a ready-to-use Cornerstone imageId
-                const imageId = await addFileToCornerstone(file);
-                console.log(`Loaded file with imageId: ${imageId}`); 
-                // logs: Loaded file with imageId: dicomfile://171
+                // Pass the metadata to register it with Cornerstone
+                const imageId = await addFileToCornerstone(file, metadata);
+                console.log(`Loaded file with imageId: ${imageId} and metadata:`,
+                  metadata.imagePositionPatient ? 'Has position' : 'No position',
+                  metadata.imageOrientationPatient ? 'Has orientation' : 'No orientation'
+                );
                 
                 if (!imageId) {
                   console.error(`Failed to create imageId for file: ${file.name}`);

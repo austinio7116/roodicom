@@ -9,6 +9,11 @@ export interface DicomMetadata {
   instanceNumber: number;
   studyInstanceUID: string;
   seriesInstanceUID: string;
+  // Spatial metadata for MPR
+  imagePositionPatient?: number[];
+  imageOrientationPatient?: number[];
+  pixelSpacing?: number[];
+  sliceThickness?: number;
   // Add more metadata fields as needed
 }
 

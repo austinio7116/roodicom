@@ -1,13 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Paper /* Removed Grid as it wasn't used */ } from '@mui/material';
 import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import SimpleStackViewport from './SimpleStackViewport';
-import ViewerToolbar from './ViewerToolbar'; // Ensure this path is correct
+import ViewerToolbar, { OrientationType } from './ViewerToolbar'; // Import OrientationType
+import DicomMetadataViewer from './DicomMetadataViewer'; // Import the DICOM metadata viewer
 import { setLayout } from '../../store/slices/viewportsSlice'; // Ensure this path is correct
 
 // Import Cornerstone Core and necessary types
 import * as cornerstone3D from '@cornerstonejs/core';
-import { IStackViewport } from '@cornerstonejs/core/types'; // Specific type for stack viewport
+import { IStackViewport, IVolumeViewport } from '@cornerstonejs/core/types'; // Add IVolumeViewport
+import { Enums } from '@cornerstonejs/core'; // Import Enums for orientation constants
 
 // It's generally better to have RootState defined centrally
 // but using the local interface for now as provided in the original code.
@@ -24,6 +26,10 @@ interface ViewportsState {
 
 const ViewerContainer: React.FC = () => {
   const dispatch = useAppDispatch();
+  // State to track current orientation for each viewport
+  const [viewportOrientations, setViewportOrientations] = useState<Record<string, OrientationType>>({});
+  // State for DICOM metadata viewer
+  const [dicomMetadataOpen, setDicomMetadataOpen] = useState<boolean>(false);
 
   // Use RootState for type safety with useAppSelector if configured
   // Otherwise, casting like below is necessary
@@ -194,36 +200,198 @@ const ViewerContainer: React.FC = () => {
       console.error(`Error inverting viewport ${csViewportId}:`, error);
     }
   };
+const handleReset = () => {
+  const activeInfo = getActiveCornerstoneViewport();
+  if (!activeInfo) {
+    console.warn('No active viewport available for reset');
+    return;
+  }
+  
+  const { renderingEngine, viewport, csViewportId } = activeInfo;
 
-  const handleReset = () => {
-    const activeInfo = getActiveCornerstoneViewport();
-    if (!activeInfo) {
-      console.warn('No active viewport available for reset');
+  try {
+    console.log('Resetting viewport:', csViewportId);
+    
+    // Reset camera (zoom, pan, position)
+    viewport.resetCamera();
+    console.log('Camera reset complete');
+
+    // Reset properties (VOI, rotation, flip) to defaults from metadata
+    viewport.resetProperties();
+    console.log('Properties reset complete');
+
+    // Render the viewport (using render() method from example code)
+    viewport.render();
+    
+    console.log('Reset complete');
+  } catch (error) {
+    console.error(`Error resetting viewport ${csViewportId}:`, error);
+  }
+};
+
+// Handler for MPR orientation change
+const handleMPROrientationChange = async (orientation: OrientationType) => {
+  const activeInfo = getActiveCornerstoneViewport();
+  if (!activeInfo) {
+    console.warn('No active viewport available for MPR orientation change');
+    return;
+  }
+  
+  const { renderingEngine, viewport, csViewportId } = activeInfo;
+
+  try {
+    console.log(`Changing MPR orientation to: ${orientation}`);
+    
+    // Update the orientation state for this viewport
+    if (activeViewportId) {
+      setViewportOrientations(prev => ({
+        ...prev,
+        [activeViewportId]: orientation
+      }));
+    }
+    
+    // Get the element from the current viewport
+    const element = viewport.element;
+    
+    // Get the current image IDs from the stack viewport
+    const imageIds = viewport.getImageIds();
+    
+    if (!imageIds || imageIds.length === 0) {
+      console.warn('No image IDs available for MPR conversion');
       return;
     }
     
-    const { renderingEngine, viewport, csViewportId } = activeInfo;
-
-    try {
-      console.log('Resetting viewport:', csViewportId);
+    // Create a unique volume ID for this viewport
+    const volumeLoaderScheme = 'cornerstoneStreamingImageVolume';
+    const volumeName = `volume-${activeViewportId || 'default'}`;
+    const volumeId = `${volumeLoaderScheme}:${volumeName}`;
+    
+    // Log the metadata for the first image to see what's available
+    const firstImageId = imageIds[0];
+    console.log(`Checking metadata for ${firstImageId}`);
+    
+    // Get the metadata provider
+    const metadataProvider = cornerstone3D.metaData;
+    
+    // Check what metadata is available
+    const imagePositionPatient = metadataProvider.get('imagePositionPatient', firstImageId);
+    const imageOrientationPatient = metadataProvider.get('imageOrientationPatient', firstImageId);
+    const pixelSpacing = metadataProvider.get('pixelSpacing', firstImageId);
+    const sliceThickness = metadataProvider.get('sliceThickness', firstImageId);
+    
+    console.log('Available metadata:', {
+      imagePositionPatient,
+      imageOrientationPatient,
+      pixelSpacing,
+      sliceThickness
+    });
+    
+    // Check if we have enough metadata for MPR
+    if (!imagePositionPatient || !imageOrientationPatient) {
+      console.warn('Missing required metadata for MPR. Using stack viewport instead.');
       
-      // Reset camera (zoom, pan, position)
-      viewport.resetCamera();
-      console.log('Camera reset complete');
-
-      // Reset properties (VOI, rotation, flip) to defaults from metadata
-      viewport.resetProperties();
-      console.log('Properties reset complete');
-
-      // Render the viewport (using render() method from example code)
-      viewport.render();
-      
-      console.log('Reset complete');
-    } catch (error) {
-      console.error(`Error resetting viewport ${csViewportId}:`, error);
+      // Update the orientation state but stay with stack viewport
+      console.log(`Setting orientation state to ${orientation} (simulated)`);
+      return;
     }
+    
+    // Disable the current viewport
+    renderingEngine.disableElement(csViewportId);
+    
+    // Create a new viewport with the desired orientation
+    const viewportInput = {
+      viewportId: csViewportId,
+      type: Enums.ViewportType.ORTHOGRAPHIC,
+      element,
+      defaultOptions: {
+        orientation: Enums.OrientationAxis[orientation],
+        background: [0.2, 0, 0.2] as [number, number, number]
+      }
+    };
+    
+    // Enable the new viewport
+    renderingEngine.enableElement(viewportInput);
+    
+    // Get the new viewport (now an orthographic/volume viewport)
+    const newViewport = renderingEngine.getViewport(csViewportId) as cornerstone3D.Types.IVolumeViewport;
+    
+    try {
+      // Create and cache the volume from the image IDs
+      console.log(`Creating volume from ${imageIds.length} images with ID: ${volumeId}`);
+      
+      // Create the volume
+      const volume = await cornerstone3D.volumeLoader.createAndCacheVolume(volumeId, {
+        imageIds
+      });
+      
+      // Load the volume
+      await volume.load();
+      
+      // Set the volume on the viewport
+      await newViewport.setVolumes([
+        {
+          volumeId
+        }
+      ]);
+      
+      // Render the viewport
+      newViewport.render();
+      
+      console.log(`MPR orientation changed to ${orientation}`);
+    } catch (volumeError) {
+      console.error(`Error creating volume: ${volumeError}`);
+      
+      // If volume creation fails, fall back to stack viewport
+      renderingEngine.disableElement(csViewportId);
+      
+      // Re-create the original stack viewport
+      const stackViewportInput = {
+        viewportId: csViewportId,
+        type: Enums.ViewportType.STACK,
+        element
+      };
+      
+      renderingEngine.enableElement(stackViewportInput);
+      
+      // Get the stack viewport
+      const stackViewport = renderingEngine.getViewport(csViewportId) as cornerstone3D.Types.IStackViewport;
+      
+      // Set the original stack of images
+      stackViewport.setStack(imageIds);
+      
+      // Render the viewport
+      stackViewport.render();
+      
+      console.log(`Fallback to stack viewport due to volume creation failure`);
+    }
+  } catch (error) {
+    console.error(`Error changing MPR orientation to ${orientation}:`, error);
+  }
+};
+
+  // Handler for showing DICOM metadata
+  const handleShowDicomMetadata = () => {
+    setDicomMetadataOpen(true);
   };
 
+  // Log metadata viewer state when opened
+  useEffect(() => {
+    if (dicomMetadataOpen) {
+      const activeViewport = activeViewportId ? viewports[activeViewportId] : null;
+      const singleImageId = activeViewport?.imageId;
+      const imageIdsArray = activeViewport?.imageIds;
+      const firstImageIdFromArray = imageIdsArray && imageIdsArray.length > 0 ? imageIdsArray[0] : null;
+      
+      console.log('Opening metadata viewer with:', {
+        activeViewportId,
+        singleImageId,
+        imageIdsArray,
+        firstImageIdFromArray,
+        effectiveImageId: singleImageId || firstImageIdFromArray,
+        viewport: activeViewport
+      });
+    }
+  }, [dicomMetadataOpen, activeViewportId, viewports]);
 
   // --- Component Rendering ---
   return (
@@ -235,6 +403,9 @@ const ViewerContainer: React.FC = () => {
         onRotateRight={() => handleRotate('right')}
         onInvert={handleInvert}
         onReset={handleReset}
+        onMPROrientationChange={handleMPROrientationChange}
+        currentOrientation={activeViewportId ? viewportOrientations[activeViewportId] || 'AXIAL' : 'AXIAL'}
+        onShowDicomMetadata={handleShowDicomMetadata}
        />
       <Paper
         elevation={3}
@@ -272,6 +443,20 @@ const ViewerContainer: React.FC = () => {
           })}
         </Box>
       </Paper>
+      
+      {/* DICOM Metadata Viewer */}
+      <DicomMetadataViewer
+        open={dicomMetadataOpen}
+        onClose={() => setDicomMetadataOpen(false)}
+        imageId={activeViewportId ? (
+          // Try to get the imageId from the active viewport
+          viewports[activeViewportId]?.imageId ||
+          // If no single imageId, try to get the first imageId from the imageIds array
+          (viewports[activeViewportId]?.imageIds && viewports[activeViewportId]?.imageIds.length > 0
+            ? viewports[activeViewportId]?.imageIds[0]
+            : null)
+        ) : null}
+      />
     </Box>
   );
 };
