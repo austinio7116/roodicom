@@ -171,6 +171,25 @@ export const dicomGroupNames: Record<string, string> = {
     '001021D0': 'Last Menstrual Date',
     '001021F0': 'Patient Religious Preference',
     '00104000': 'Patient Comments',
+
+      // Group 0012: Clinical Trial Information
+    '00120010': 'Clinical Trial Sponsor Name',
+    '00120020': 'Clinical Trial Protocol ID',
+    '00120021': 'Clinical Trial Site Name',
+    '00120030': 'Clinical Trial Subject ID',
+    '00120031': 'Clinical Trial Subject Reading ID',
+    '00120040': 'Clinical Trial Protocol Ethics Committee Name',
+    '00120050': 'Clinical Trial Time Point ID',
+    '00120051': 'Clinical Trial Time Point Description',
+    '00120060': 'Clinical Trial Protocol Ethics Committee Approval Number',
+    '00120062': 'Clinical Trial Coordinating Center Name',
+    '00120071': 'Clinical Trial Series ID',
+    '00120072': 'Clinical Trial Series Description',
+    '00120081': 'Clinical Trial Protocol Ethics Committee Distribution',
+    '00120082': 'Clinical Trial Subject Consent',
+    '00120083': 'Clinical Trial Subject Participation Eligibility',
+    '00120084': 'Clinical Trial Subject Weight',
+    '00120085': 'Clinical Trial Subject Height',
   
     // Group 0018: Acquisition Information
     '00180010': 'Contrast/Bolus Agent',

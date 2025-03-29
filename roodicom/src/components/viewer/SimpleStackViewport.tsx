@@ -121,12 +121,9 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
 
           toolGroup.setToolPassive('StackScroll'); // Allow StackScroll via wheel even if another tool is active
           // Set StackScroll active for MouseWheel interaction
-          toolGroup.setToolActive('StackScroll', {
-            bindings: [
-              // The type casting might be necessary depending on library versions
-              { mouseButton: csToolsEnums.MouseBindings.Wheel}
-            ],
-          });
+          // Disable the default StackScroll tool for wheel - we'll use our own handler
+          // We'll still keep it in the toolGroup for other uses
+          toolGroup.setToolPassive('StackScroll');
 
           // Set WindowLevel active for Primary Mouse Button interaction (ONLY ONCE)
           // The default active tool might be set later based on Redux state
@@ -416,6 +413,56 @@ useEffect(() => {
   }, [viewport?.imageId, viewport?.imageIds, viewportId, dispatch, cornerstoneViewportId, renderingEngineId]); // Dependencies for image loading
 
 
+// --- Custom Wheel Event Handler ---
+useEffect(() => {
+  // Only run if the image is loaded and we expect multiple images
+  if (!localImageLoaded || !viewport?.imageIds || viewport.imageIds.length <= 1 || !viewportRef.current) {
+    return; // No handler needed if not loaded, no images, or no viewport element
+  }
+
+  const handleWheel = (event: WheelEvent) => {
+    event.preventDefault(); // Prevent default browser behavior
+    event.stopPropagation(); // Stop event propagation
+
+    try {
+      const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+      if (!renderingEngine) return;
+
+      const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as cornerstone3D.Types.IStackViewport;
+      if (!stackViewport || typeof stackViewport.getCurrentImageIdIndex !== 'function') return;
+
+      const currentIndex = stackViewport.getCurrentImageIdIndex();
+      if (currentIndex === undefined) return;
+
+      // Determine direction - negative deltaY means scroll up, positive means scroll down
+      // We want to invert the default behavior, so scroll up = next image (increment index)
+      const direction = event.deltaY < 0 ? -1 : 1;
+      
+      // Calculate new index with bounds checking
+      const maxIndex = viewport.imageIds.length - 1;
+      const newIndex = Math.max(0, Math.min(maxIndex, currentIndex + direction));
+      
+      // Only update if the index changed
+      if (newIndex !== currentIndex) {
+        stackViewport.setImageIdIndex(newIndex);
+        setCurrentImageIndex(newIndex);
+      }
+    } catch (error) {
+      console.error('Error handling wheel event:', error);
+    }
+  };
+
+  // Add wheel event listener
+  viewportRef.current.addEventListener('wheel', handleWheel, { passive: false });
+
+  // Cleanup
+  return () => {
+    if (viewportRef.current) {
+      viewportRef.current.removeEventListener('wheel', handleWheel);
+    }
+  };
+}, [renderingEngineId, cornerstoneViewportId, localImageLoaded, viewport?.imageIds, currentImageIndex, viewportId]);
+
 // --- Slider Sync Listener Effect ---
 useEffect(() => {
   // Only run if the image is loaded and we expect multiple images
@@ -504,6 +551,23 @@ useEffect(() => {
   const handleClick = () => {
     if (!isActive) {
         dispatch(setActiveViewport(viewportId));
+        
+        // When switching to this viewport, ensure the current image index is up to date
+        try {
+            const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+            if (renderingEngine) {
+                const stackViewport = renderingEngine.getViewport(cornerstoneViewportId) as cornerstone3D.Types.IStackViewport;
+                if (stackViewport && typeof stackViewport.getCurrentImageIdIndex === 'function') {
+                    const currentIndex = stackViewport.getCurrentImageIdIndex();
+                    if (currentIndex !== undefined && currentIndex !== currentImageIndex) {
+                        console.log(`Updating image index from ${currentImageIndex} to ${currentIndex} when activating viewport ${viewportId}`);
+                        setCurrentImageIndex(currentIndex);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error(`Error updating image index when activating viewport ${viewportId}:`, error);
+        }
     }
   };
 
