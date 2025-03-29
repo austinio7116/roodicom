@@ -2,7 +2,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export type SidebarTab = 'files' | 'hierarchy' | 'settings';
 export type ViewMode = 'single' | 'compare' | 'grid';
-export type ViewLayout = '1x1' | '1x2' | '2x1' | '2x2' | '3x3';
+export type ViewLayout = '1x1' | '1x2' | '1x3'  | '2x1' | '2x2' | '2x3' | '3x3'| '3x4';
 
 interface UiState {
   sidebarOpen: boolean;

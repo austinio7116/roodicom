@@ -38,33 +38,34 @@ const ViewerToolbar: React.FC = () => {
   };
   
   const handleLayoutChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    const newLayout = event.target.value as string;
-    let rows = 1;
-    let columns = 1;
-    
-    switch (newLayout) {
-      case '1x1':
-        rows = 1;
-        columns = 1;
-        break;
-      case '1x2':
-        rows = 1;
-        columns = 2;
-        break;
-      case '2x1':
-        rows = 2;
-        columns = 1;
-        break;
-      case '2x2':
-        rows = 2;
-        columns = 2;
-        break;
-      case '3x3':
-        rows = 3;
-        columns = 3;
-        break;
-      default:
-        break;
+    const newLayout = event.target.value as string; // e.g., "1x1", "2x3", "4x4"
+    let rows = 1; // Default to 1x1
+    let columns = 1; // Default to 1x1
+  
+    // Basic check for valid input format
+    if (typeof newLayout === 'string' && newLayout.includes('x')) {
+      const parts = newLayout.split('x');
+  
+      // Ensure we got exactly two parts after splitting
+      if (parts.length === 2) {
+        const parsedRows = parseInt(parts[0], 10); // Parse the first part (rows)
+        const parsedColumns = parseInt(parts[1], 10); // Parse the second part (columns)
+  
+        // Validate that both parts successfully parsed to positive numbers
+        if (!isNaN(parsedRows) && parsedRows > 0 && !isNaN(parsedColumns) && parsedColumns > 0) {
+          rows = parsedRows;
+          columns = parsedColumns;
+        } else {
+          // Handle cases like "0x2", "ax2", "3xNaN", etc. - Log warning and use default
+          console.warn(`Invalid number format in layout string: "${newLayout}". Using default ${rows}x${columns}.`);
+        }
+      } else {
+        // Handle cases like "1x2x3" or "abc" - Log warning and use default
+        console.warn(`Invalid layout format: "${newLayout}". Expected format 'RowsxColumns'. Using default ${rows}x${columns}.`);
+      }
+    } else {
+       // Handle cases where input isn't a string or doesn't contain 'x' - Log warning and use default
+       console.warn(`Invalid or unexpected layout input: "${newLayout}". Using default ${rows}x${columns}.`);
     }
     
     dispatch(setLayout({ rows, columns }));
@@ -186,9 +187,12 @@ const ViewerToolbar: React.FC = () => {
           >
             <MenuItem value="1x1">1x1</MenuItem>
             <MenuItem value="1x2">1x2</MenuItem>
+            <MenuItem value="1x3">1x3</MenuItem>
             <MenuItem value="2x1">2x1</MenuItem>
             <MenuItem value="2x2">2x2</MenuItem>
+            <MenuItem value="2x3">2x3</MenuItem>
             <MenuItem value="3x3">3x3</MenuItem>
+            <MenuItem value="3x4">3x4</MenuItem>
           </Select>
         </FormControl>
       </Toolbar>
