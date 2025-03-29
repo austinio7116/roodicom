@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react'; // Import useMemo
 import {
   Dialog,
   DialogTitle,
@@ -16,10 +16,12 @@ import {
   TableHead,
   TableRow,
   Paper,
-  CircularProgress
+  CircularProgress,
+  TextField // Import TextField
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SearchIcon from '@mui/icons-material/Search'; // Optional: for input adornment
 import * as dicomParser from 'dicom-parser';
 // Import the constants from the new file
 import { dicomGroupNames, dicomTagNames } from '../common/dicomConstants';
@@ -46,40 +48,45 @@ interface DicomGroup {
   tags: DicomTag[];
 }
 
-
-
 const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose, imageId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [metadataGroups, setMetadataGroups] = useState<DicomGroup[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>(''); // State for search input
 
+  // Reset search term when dialog opens or imageId changes
   useEffect(() => {
-    console.log('DicomMetadataViewer useEffect triggered:', { open, imageId });
-    if (open && imageId) {
-      loadDicomMetadata(imageId);
-    } else if (open && !imageId) {
-      console.warn('DicomMetadataViewer opened but no imageId provided');
-      setLoading(false);
-      setError('No image selected or image ID not available');
+    if (open) {
+      setSearchTerm(''); // Clear search on open/reload
+      if (imageId) {
+        loadDicomMetadata(imageId);
+      } else {
+        console.warn('DicomMetadataViewer opened but no imageId provided');
+        setLoading(false);
+        setError('No image selected or image ID not available');
+        setMetadataGroups([]); // Clear previous data
+      }
+    } else {
+        // Optionally clear data when closing to free memory if needed
+        // setMetadataGroups([]);
+        // setLoading(true);
+        // setError(null);
     }
-  }, [open, imageId]);
+  }, [open, imageId]); // Rerun effect when open or imageId changes
 
-  // Function to process a DICOM dataset and extract metadata
+
+  // Function to handle search input changes
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+  };
+
+  // Function to process a DICOM dataset and extract metadata (Unchanged)
   const processDataset = (dataSet: any) => {
-    // Extract metadata and group by DICOM group
     const groups: Record<string, DicomGroup> = {};
-    
-    // Process all elements in the dataset
     for (const tag in dataSet.elements) {
-      // Skip the pixel data tag as it's large and not useful to display
       if (tag === 'x7fe00010') continue;
-      
       const element = dataSet.elements[tag];
-      
-      // Get the group number (first 4 characters of the tag)
       const groupNumber = tag.substring(1, 5);
-      
-      // Get or create the group
       if (!groups[groupNumber]) {
         groups[groupNumber] = {
           groupNumber,
@@ -87,57 +94,46 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
           tags: []
         };
       }
-      
-      // Get the tag name
       const tagName = dicomTagNames[tag.substring(1)] || `Unknown Tag (${tag})`;
-      
-      // Get the tag value
       let value = '';
       if (element.vr === 'SQ') {
-        value = 'Sequence';
-      } else if (element.length > 100) {
-        value = `[Binary data, length: ${element.length} bytes]`;
+        value = 'Sequence (See Raw Data)'; // Modified for clarity
+      } else if (element.length > 256) { // Increased threshold slightly
+         value = `[Binary data or Long Text, length: ${element.length} bytes]`;
       } else {
         try {
           value = dataSet.string(tag) || '';
-          
-          // Format special values
           if (tag === 'x00200032' || tag === 'x00200037' || tag === 'x00280030') {
-            // Format position, orientation, and spacing as arrays
             value = value.split('\\').join(', ');
           }
         } catch (e) {
-          value = `[Error reading value: ${e}]`;
+          value = `[Error reading value: ${e instanceof Error ? e.message : String(e)}]`;
         }
       }
-      
-      // Add the tag to the group
       groups[groupNumber].tags.push({
         tag,
         name: tagName,
-        vr: element.vr || 'Unknown',
+        vr: element.vr || '??', // Use '??' for unknown VR
         value
       });
     }
-    
-    // Convert the groups object to an array and sort by group number
-    const groupsArray = Object.values(groups).sort((a, b) => 
+    const groupsArray = Object.values(groups).sort((a, b) =>
       a.groupNumber.localeCompare(b.groupNumber)
     );
-    
     setMetadataGroups(groupsArray);
     setLoading(false);
   };
 
+
+  // Function to load DICOM metadata (Unchanged, but added clear state on failure)
   const loadDicomMetadata = async (imageId: string) => {
     console.log('loadDicomMetadata function called with imageId:', imageId);
     setLoading(true);
     setError(null);
+    setMetadataGroups([]); // Clear previous data before loading
 
     try {
       console.log('Loading DICOM metadata for imageId:', imageId);
-      
-      // Extract the file ID from the imageId (format could be dicomfile://123 or dicomfile:123)
       let fileId;
       if (imageId.startsWith('dicomfile://')) {
         fileId = imageId.replace('dicomfile://', '');
@@ -148,74 +144,30 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
         throw new Error(`Unexpected imageId format: ${imageId}. Expected format: dicomfile://id or dicomfile:id`);
       }
       console.log('Extracted fileId:', fileId);
-      
-      // Get the file from the Cornerstone file manager
+
       const fileManager = (window as any).cornerstoneFileManager;
-      console.log('File manager available:', !!fileManager);
-      console.log('File manager type:', fileManager ? typeof fileManager : 'undefined');
-      
       if (!fileManager) {
-        throw new Error('Cornerstone file manager not available. Make sure Cornerstone is properly initialized.');
+        throw new Error('Cornerstone file manager not available.');
       }
-      
-      // Log available files in the file manager
-      const fileKeys = fileManager.files ? Object.keys(fileManager.files) : [];
-      console.log('Files in file manager:', fileKeys);
-      console.log('Looking for file with ID:', fileId);
-      
-      // Try to get the file
+
       const file = fileManager.get ? fileManager.get(fileId) : null;
-      console.log('File found via get method:', !!file);
-      
-      if (!file) {
-        console.log('File not found via get method, trying alternative methods...');
-        // Try alternative methods to get the file
-        const alternativeFile = fileManager.files ? fileManager.files[fileId] : null;
-        console.log('Alternative file found via files object:', !!alternativeFile);
-        
-        if (alternativeFile) {
-          console.log('Using alternative file access method');
-          // Use the alternative file
-          try {
-            const arrayBuffer = await alternativeFile.arrayBuffer();
-            console.log('Got array buffer from alternative file, length:', arrayBuffer.byteLength);
-            
-            // Parse the DICOM file
-            const dataSet = dicomParser.parseDicom(new Uint8Array(arrayBuffer));
-            console.log('Parsed DICOM dataset, elements:', Object.keys(dataSet.elements).length);
-            
-            // Process the dataset and set the metadata groups
-            processDataset(dataSet);
-            return;
-          } catch (bufferError) {
-            console.error('Error processing alternative file:', bufferError);
-            const errorMessage = bufferError instanceof Error
-              ? bufferError.message
-              : 'Unknown error processing file';
-            throw new Error(`Error processing file: ${errorMessage}`);
-          }
-        }
-        
-        // If we have files but not the one we're looking for, log the available IDs
-        if (fileKeys.length > 0) {
-          console.log('Available file IDs:', fileKeys);
-          throw new Error(`File not found for ID: ${fileId}. Available IDs: ${fileKeys.join(', ')}`);
-        } else {
-          throw new Error(`File not found for ID: ${fileId}. No files available in file manager.`);
-        }
-      }
-      
-      // Read the file as an ArrayBuffer
+      if (!file && fileManager.files && fileManager.files[fileId]) {
+           console.log('Using alternative file access method');
+           const alternativeFile = fileManager.files[fileId];
+           const arrayBuffer = await alternativeFile.arrayBuffer();
+           const dataSet = dicomParser.parseDicom(new Uint8Array(arrayBuffer));
+           processDataset(dataSet);
+           return; // Exit early after processing alternative file
+       } else if (!file) {
+            const fileKeys = fileManager.files ? Object.keys(fileManager.files) : [];
+            const availableIds = fileKeys.length > 0 ? `Available IDs: ${fileKeys.join(', ')}` : 'No files available in file manager.';
+            throw new Error(`File not found for ID: ${fileId}. ${availableIds}`);
+       }
+
       console.log('Reading file as ArrayBuffer...');
       const arrayBuffer = await file.arrayBuffer();
-      console.log('Got array buffer from file, length:', arrayBuffer.byteLength);
-      
-      // Parse the DICOM file
       console.log('Parsing DICOM data...');
       const dataSet = dicomParser.parseDicom(new Uint8Array(arrayBuffer));
-      console.log('Parsed DICOM dataset, elements:', Object.keys(dataSet.elements).length);
-      
-      // Process the dataset and set the metadata groups
       console.log('Processing dataset...');
       processDataset(dataSet);
       console.log('Dataset processed successfully');
@@ -223,8 +175,39 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
       console.error('Error loading DICOM metadata:', error);
       setError(error instanceof Error ? error.message : 'Unknown error');
       setLoading(false);
+      setMetadataGroups([]); // Ensure data is cleared on error
     }
   };
+
+  // Memoized filtered metadata groups based on search term
+  const filteredMetadataGroups = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return metadataGroups; // No search term, return all original groups
+    }
+
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+    // 1. Filter tags within each group
+    // 2. Filter out groups that have no matching tags left
+    return metadataGroups
+      .map(group => {
+        const filteredTags = group.tags.filter(tag =>
+          tag.tag.toLowerCase().includes(lowerCaseSearchTerm) ||
+          tag.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+          tag.vr.toLowerCase().includes(lowerCaseSearchTerm) ||
+          (typeof tag.value === 'string' && tag.value.toLowerCase().includes(lowerCaseSearchTerm)) // Check value is string
+        );
+
+        // Return a new group object with potentially filtered tags
+        return {
+          ...group,
+          tags: filteredTags
+        };
+      })
+      // Keep only groups that still have tags after filtering
+      .filter(group => group.tags.length > 0);
+
+  }, [metadataGroups, searchTerm]); // Recalculate when data or search term changes
 
   return (
     <Dialog
@@ -233,6 +216,7 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
       maxWidth="lg"
       fullWidth
       aria-labelledby="dicom-metadata-dialog-title"
+      sx={{ '& .MuiDialog-paper': { maxHeight: '90vh' } }} // Ensure dialog doesn't exceed viewport height
     >
       <DialogTitle id="dicom-metadata-dialog-title">
         DICOM Metadata
@@ -250,18 +234,52 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
+        {/* Search Box */}
+        <Box sx={{ mb: 2, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1, pt: 1 }}>
+           {/* Add pt to prevent overlap with divider */}
+          <TextField
+            fullWidth
+            variant="outlined"
+            size="small"
+            placeholder="Search metadata (Tag, Name, VR, Value)..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            InputProps={{
+              startAdornment: (
+                <SearchIcon color="action" sx={{ mr: 1 }} />
+              ),
+            }}
+          />
+        </Box>
+
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
           </Box>
         ) : error ? (
-          <Typography color="error" variant="body1">
-            Error: {error}
+          <Typography color="error" variant="body1" sx={{ p: 2 }}>
+            Error loading metadata: {error}
           </Typography>
+        ) : filteredMetadataGroups.length === 0 && searchTerm ? (
+            <Typography variant="body1" sx={{ p: 2, textAlign: 'center' }}>
+                No metadata found matching "{searchTerm}".
+            </Typography>
+        ) : filteredMetadataGroups.length === 0 && !searchTerm ? (
+             <Typography variant="body1" sx={{ p: 2, textAlign: 'center' }}>
+                 No metadata loaded or available.
+             </Typography>
         ) : (
           <Box>
-            {metadataGroups.map((group) => (
-              <Accordion key={group.groupNumber} defaultExpanded={group.groupNumber === '0010'}>
+            {/* Render using filtered groups */}
+            {filteredMetadataGroups.map((group) => (
+              // Conditionally expand based on search term or default to Patient Info
+              <Accordion
+                  key={group.groupNumber}
+                  // Expand if searching, otherwise default expand patient info
+                  defaultExpanded={!searchTerm && group.groupNumber === '0010'}
+                  // Use TransitionProps to disable animation for smoother filtering experience
+                  TransitionProps={{ unmountOnExit: true }} // Unmount when closed
+              >
                 <AccordionSummary
                   expandIcon={<ExpandMoreIcon />}
                   aria-controls={`group-${group.groupNumber}-content`}
@@ -269,26 +287,30 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
                 >
                   <Typography variant="subtitle1">
                     {group.groupName} (Group {group.groupNumber})
+                    {/* Optionally show tag count */}
+                    <Typography component="span" variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>
+                        ({group.tags.length} {group.tags.length === 1 ? 'tag' : 'tags'})
+                    </Typography>
                   </Typography>
                 </AccordionSummary>
-                <AccordionDetails>
-                  <TableContainer component={Paper} variant="outlined">
-                    <Table size="small">
+                <AccordionDetails sx={{ p: 0 }}> {/* Remove padding for full-width table */}
+                  <TableContainer component={Paper} variant="outlined" sx={{ border: 'none' }}> {/* Remove border */}
+                    <Table size="small" stickyHeader>
                       <TableHead>
                         <TableRow>
-                          <TableCell>Tag</TableCell>
-                          <TableCell>Name</TableCell>
-                          <TableCell>VR</TableCell>
-                          <TableCell>Value</TableCell>
+                           <TableCell sx={{ width: '15%' }}>Tag</TableCell>
+                           <TableCell sx={{ width: '35%' }}>Name</TableCell>
+                           <TableCell sx={{ width: '10%' }}>VR</TableCell>
+                           <TableCell sx={{ width: '40%' }}>Value</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {group.tags.map((tag) => (
-                          <TableRow key={tag.tag}>
-                            <TableCell>{tag.tag}</TableCell>
-                            <TableCell>{tag.name}</TableCell>
-                            <TableCell>{tag.vr}</TableCell>
-                            <TableCell>{tag.value}</TableCell>
+                          <TableRow key={tag.tag} hover>
+                             <TableCell sx={{ fontFamily: 'monospace' }}>{tag.tag}</TableCell>
+                             <TableCell>{tag.name}</TableCell>
+                             <TableCell sx={{ fontFamily: 'monospace' }}>{tag.vr}</TableCell>
+                             <TableCell sx={{ wordBreak: 'break-word' }}>{tag.value}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
