@@ -94,7 +94,8 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
           tags: []
         };
       }
-      const tagName = dicomTagNames[tag.substring(1)] || `Unknown Tag (${tag})`;
+      // Convert tag to uppercase for case-insensitive matching with dicomTagNames
+      const tagName = dicomTagNames[tag.substring(1).toUpperCase()] || `Unknown Tag (${tag})`;
       let value = '';
       if (element.vr === 'SQ') {
         value = 'Sequence (See Raw Data)'; // Modified for clarity
@@ -218,7 +219,7 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
       aria-labelledby="dicom-metadata-dialog-title"
       sx={{ '& .MuiDialog-paper': { maxHeight: '90vh' } }} // Ensure dialog doesn't exceed viewport height
     >
-      <DialogTitle id="dicom-metadata-dialog-title">
+      <DialogTitle id="dicom-metadata-dialog-title" sx={{ py: 1 }}> {/* Reduce padding */}
         DICOM Metadata
         <IconButton
           aria-label="close"
@@ -233,10 +234,9 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ p: 1 }}> {/* Reduce padding */}
         {/* Search Box */}
-        <Box sx={{ mb: 2, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1, pt: 1 }}>
-           {/* Add pt to prevent overlap with divider */}
+        <Box sx={{ mb: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1, pt: 0.5, pb: 0.5 }}>
           <TextField
             fullWidth
             variant="outlined"
@@ -244,10 +244,12 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
             placeholder="Search metadata (Tag, Name, VR, Value)..."
             value={searchTerm}
             onChange={handleSearchChange}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1 } }}
             InputProps={{
               startAdornment: (
-                <SearchIcon color="action" sx={{ mr: 1 }} />
+                <SearchIcon color="action" sx={{ mr: 0.5, fontSize: '1.2rem' }} />
               ),
+              style: { fontSize: '0.9rem' }
             }}
           />
         </Box>
@@ -269,48 +271,201 @@ const DicomMetadataViewer: React.FC<DicomMetadataViewerProps> = ({ open, onClose
                  No metadata loaded or available.
              </Typography>
         ) : (
-          <Box>
+          <Box sx={{ mt: 0, p: 0, '& > *:not(:last-child)': { borderBottom: '1px solid rgba(0, 0, 0, 0.12)' } }}>
             {/* Render using filtered groups */}
             {filteredMetadataGroups.map((group) => (
               // Conditionally expand based on search term or default to Patient Info
               <Accordion
                   key={group.groupNumber}
-                  // Expand if searching, otherwise default expand patient info
-                  defaultExpanded={!searchTerm && group.groupNumber === '0010'}
+                  // Expand all accordions by default
+                  defaultExpanded={true}
                   // Use TransitionProps to disable animation for smoother filtering experience
                   TransitionProps={{ unmountOnExit: true }} // Unmount when closed
+                  sx={{
+                    mb: 0, // Remove margin bottom
+                    mt: 0, // Remove margin top
+                    '&.MuiAccordion-root': {
+                      '&:before': {
+                        display: 'none', // Remove the default divider
+                      },
+                      boxShadow: 'none', // Remove box shadow
+                      borderRadius: 0, // Remove border radius
+                      marginBottom: 0, // Remove bottom margin
+                    },
+                    '&.Mui-expanded': {
+                      marginBottom: 0, // Remove bottom margin when expanded
+                      marginTop: 0, // Remove top margin when expanded
+                    },
+                    '& .MuiAccordionDetails-root': {
+                      padding: 0, // Remove padding from details
+                      margin: 0, // Remove margin from details
+                    },
+                    '& .MuiPaper-root': {
+                      boxShadow: 'none', // Remove box shadow from paper
+                    },
+                  }}
               >
                 <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
+                  expandIcon={<ExpandMoreIcon sx={{ fontSize: '0.9rem' }} />}
                   aria-controls={`group-${group.groupNumber}-content`}
                   id={`group-${group.groupNumber}-header`}
+                  sx={{
+                    minHeight: '24px', // Even smaller height
+                    height: '24px', // Fixed height
+                    maxHeight: '24px', // Max height to prevent expansion
+                    padding: '0 8px', // Reduce padding
+                    backgroundColor: (theme) => theme.palette.grey[900], // Dark background
+                    color: 'white', // White text
+                    '& .MuiAccordionSummary-content': {
+                      margin: '0', // No margin
+                    },
+                    '&.Mui-expanded': {
+                      minHeight: '24px', // Keep the same height when expanded
+                      height: '24px',
+                      maxHeight: '24px',
+                    }
+                  }}
                 >
-                  <Typography variant="subtitle1">
+                  <Typography variant="caption" sx={{ fontWeight: 'medium', fontSize: '0.75rem', lineHeight: 1 }}>
                     {group.groupName} (Group {group.groupNumber})
                     {/* Optionally show tag count */}
-                    <Typography component="span" variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>
+                    <Typography component="span" variant="caption" sx={{ ml: 1, color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.7rem', lineHeight: 1 }}>
                         ({group.tags.length} {group.tags.length === 1 ? 'tag' : 'tags'})
                     </Typography>
                   </Typography>
                 </AccordionSummary>
-                <AccordionDetails sx={{ p: 0 }}> {/* Remove padding for full-width table */}
-                  <TableContainer component={Paper} variant="outlined" sx={{ border: 'none' }}> {/* Remove border */}
-                    <Table size="small" stickyHeader>
+                <AccordionDetails sx={{ p: 0, m: 0, mb: 0 }}> {/* Remove all padding and margin */}
+                  <TableContainer
+                    component={Paper}
+                    variant="outlined"
+                    sx={{
+                      border: 'none',
+                      m: 0,
+                      mb: 0,
+                      mt: 0,
+                      boxShadow: 'none',
+                      '& .MuiPaper-root': {
+                        m: 0,
+                        mb: 0,
+                        mt: 0
+                      }
+                    }}
+                  > {/* Remove all margins */}
+                    <Table size="small" padding="none" sx={{ m: 0, '& .MuiTableCell-root': { py: 0, px: 0 } }}> {/* Remove margin and minimize cell padding */}
                       <TableHead>
-                        <TableRow>
-                           <TableCell sx={{ width: '15%' }}>Tag</TableCell>
-                           <TableCell sx={{ width: '35%' }}>Name</TableCell>
-                           <TableCell sx={{ width: '10%' }}>VR</TableCell>
-                           <TableCell sx={{ width: '40%' }}>Value</TableCell>
+                        <TableRow sx={{ height: '18px' }}>
+                          <TableCell
+                            sx={{
+                              width: '15%',
+                              py: 0.5,
+                              px: 4,
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              borderBottom: '1px solid rgba(224, 224, 224, 0.2)',
+                              color: (theme) => theme.palette.text.primary
+                            }}
+                          >
+                            Tag
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              width: '35%',
+                              py: 0.5,
+                              px: 4,
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              borderBottom: '1px solid rgba(224, 224, 224, 0.2)',
+                              color: (theme) => theme.palette.text.primary
+                            }}
+                          >
+                            Name
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              width: '10%',
+                              py: 0.5,
+                              px: 4,
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              borderBottom: '1px solid rgba(224, 224, 224, 0.2)',
+                              color: (theme) => theme.palette.text.primary
+                            }}
+                          >
+                            VR
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              width: '40%',
+                              py: 0.5,
+                              px: 4,
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              borderBottom: '1px solid rgba(224, 224, 224, 0.2)',
+                              color: (theme) => theme.palette.text.primary
+                            }}
+                          >
+                            Value
+                          </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {group.tags.map((tag) => (
-                          <TableRow key={tag.tag} hover>
-                             <TableCell sx={{ fontFamily: 'monospace' }}>{tag.tag}</TableCell>
-                             <TableCell>{tag.name}</TableCell>
-                             <TableCell sx={{ fontFamily: 'monospace' }}>{tag.vr}</TableCell>
-                             <TableCell sx={{ wordBreak: 'break-word' }}>{tag.value}</TableCell>
+                          <TableRow
+                            key={tag.tag}
+                            hover
+                            sx={{
+                              height: '18px', // Even smaller fixed height for rows
+                              '&:nth-of-type(odd)': {
+                                backgroundColor: (theme) => theme.palette.action.hover,
+                              },
+                              '&:hover': {
+                                backgroundColor: (theme) => theme.palette.action.selected,
+                              }
+                            }}
+                          >
+                             <TableCell
+                               sx={{
+                                 width: '15%',
+                                 fontFamily: 'monospace',
+                                 fontSize: '0.7rem',
+                                 borderBottom: '1px solid rgba(224, 224, 224, 0.1)',
+                                 padding: '1px 4px'
+                               }}
+                             >
+                               {tag.tag}
+                             </TableCell>
+                             <TableCell
+                               sx={{
+                                 width: '35%',
+                                 fontSize: '0.7rem',
+                                 borderBottom: '1px solid rgba(224, 224, 224, 0.1)',
+                                 padding: '1px 4px'
+                               }}
+                             >
+                               {tag.name}
+                             </TableCell>
+                             <TableCell
+                               sx={{
+                                 width: '10%',
+                                 fontFamily: 'monospace',
+                                 fontSize: '0.7rem',
+                                 borderBottom: '1px solid rgba(224, 224, 224, 0.1)',
+                                 padding: '1px 4px'
+                               }}
+                             >
+                               {tag.vr}
+                             </TableCell>
+                             <TableCell
+                               sx={{
+                                 width: '40%',
+                                 wordBreak: 'break-word',
+                                 fontSize: '0.7rem',
+                                 borderBottom: '1px solid rgba(224, 224, 224, 0.1)',
+                                 padding: '1px 4px'
+                               }}
+                             >
+                               {tag.value}
+                             </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
