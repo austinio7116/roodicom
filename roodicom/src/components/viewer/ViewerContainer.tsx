@@ -123,15 +123,21 @@ const ViewerContainer: React.FC = () => {
     const { renderingEngine, viewport, csViewportId } = activeInfo;
 
     try {
-      // Get current camera
-      const camera = viewport.getCamera();
-      console.log('Current camera:', camera);
+      // Get current rotation from ViewPresentation
+      let currentRotation = 0;
+      try {
+        // This is the correct way to get rotation in Cornerstone3D
+        const viewPresentation = viewport.getViewPresentation();
+        if (viewPresentation && typeof viewPresentation.rotation === 'number') {
+          currentRotation = viewPresentation.rotation;
+          console.log('Current rotation from ViewPresentation:', currentRotation);
+        }
+      } catch (err) {
+        console.warn('Could not get ViewPresentation, using default rotation of 0');
+      }
       
-      // Get current rotation angle
-      const currentRotation = camera.rotation || 0;
+      // Calculate new rotation angle
       const amount = direction === 'left' ? -90 : 90;
-
-      // Calculate new rotation, ensuring it wraps around 360 degrees
       let newRotation = (currentRotation + amount) % 360;
       if (newRotation < 0) {
         newRotation += 360; // Ensure rotation is always 0 <= angle < 360
@@ -139,13 +145,19 @@ const ViewerContainer: React.FC = () => {
 
       console.log(`Rotating from ${currentRotation}° to ${newRotation}°`);
       
-      // Set the new rotation
-      viewport.setCamera({ rotation: newRotation });
+      // Set the rotation using setViewPresentation (from the example code)
+      try {
+        viewport.setViewPresentation({
+          rotation: newRotation
+        });
+        console.log('Set rotation via setViewPresentation');
+      } catch (err) {
+        console.warn('setViewPresentation failed:', err);
+      }
       
       // Render the viewport
-      renderingEngine.renderViewport(csViewportId);
-      
-      console.log(`Rotation complete: ${newRotation}°`);
+      viewport.render();
+      console.log('Rotation complete');
     } catch(error) {
       console.error(`Error rotating viewport ${csViewportId}:`, error);
     }
@@ -165,41 +177,18 @@ const ViewerContainer: React.FC = () => {
       const currentProperties = viewport.getProperties();
       console.log('Current viewport properties:', currentProperties);
       
-      // Check if voiRange exists
-      if (!currentProperties.voiRange) {
-        console.warn('No VOI range found in viewport properties');
-        
-        // Create a default VOI range if none exists
-        const defaultVoiRange = {
-          lower: 0,
-          upper: 255
-        };
-        
-        // Invert colors by using a negative window width
-        viewport.setProperties({
-          voiRange: {
-            lower: defaultVoiRange.upper,
-            upper: defaultVoiRange.lower
-          }
-        });
-      } else {
-        // Get current VOI range
-        const { lower, upper } = currentProperties.voiRange;
-        
-        // Invert by swapping lower and upper values
-        viewport.setProperties({
-          voiRange: {
-            lower: upper,
-            upper: lower
-          }
-        });
-        
-        console.log(`Inverted VOI range: ${upper} to ${lower}`);
-      }
+      // Get current invert state (default to false if not found)
+      const invert = currentProperties.invert || false;
+      console.log('Current invert state:', invert);
+      
+      // Simply toggle the invert property (from the example code)
+      viewport.setProperties({
+        invert: !invert
+      });
+      console.log('Set invert to:', !invert);
       
       // Render the viewport
-      renderingEngine.renderViewport(csViewportId);
-      
+      viewport.render();
       console.log('Inversion complete');
     } catch (error) {
       console.error(`Error inverting viewport ${csViewportId}:`, error);
@@ -226,8 +215,8 @@ const ViewerContainer: React.FC = () => {
       viewport.resetProperties();
       console.log('Properties reset complete');
 
-      // Render the viewport
-      renderingEngine.renderViewport(csViewportId);
+      // Render the viewport (using render() method from example code)
+      viewport.render();
       
       console.log('Reset complete');
     } catch (error) {
