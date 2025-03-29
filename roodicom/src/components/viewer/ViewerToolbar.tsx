@@ -9,7 +9,8 @@ import {
   MenuItem, 
   FormControl, 
   InputLabel,
-  Box
+  Box,
+  SelectChangeEvent
 } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -28,46 +29,55 @@ import { useAppSelector, useAppDispatch } from '../../hooks/redux';
 import { setActiveTool, ToolName } from '../../store/slices/toolsSlice';
 import { setLayout } from '../../store/slices/viewportsSlice';
 
-const ViewerToolbar: React.FC = () => {
+// Define props for the new handlers
+interface ViewerToolbarProps {
+  onRotateLeft: () => void;
+  onRotateRight: () => void;
+  onInvert: () => void;
+  onReset: () => void;
+  // Include other props if needed, e.g. if layout/activeTool aren't solely from Redux
+}
+
+// Update component signature to accept props
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
+  onRotateLeft,
+  onRotateRight,
+  onInvert,
+  onReset
+}) => {
   const dispatch = useAppDispatch();
   const activeTool = useAppSelector((state) => state.tools.activeTool);
   const layout = useAppSelector((state) => state.viewports.layout);
-  
+
   const handleToolChange = (tool: ToolName) => {
     dispatch(setActiveTool(tool));
   };
-  
-  const handleLayoutChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+
+  // Type the event correctly for MUI Select v5+
+  const handleLayoutChange = (event: SelectChangeEvent<string>) => {
     const newLayout = event.target.value as string; // e.g., "1x1", "2x3", "4x4"
-    let rows = 1; // Default to 1x1
-    let columns = 1; // Default to 1x1
-  
-    // Basic check for valid input format
+    let rows = 1;
+    let columns = 1;
+
     if (typeof newLayout === 'string' && newLayout.includes('x')) {
       const parts = newLayout.split('x');
-  
-      // Ensure we got exactly two parts after splitting
       if (parts.length === 2) {
-        const parsedRows = parseInt(parts[0], 10); // Parse the first part (rows)
-        const parsedColumns = parseInt(parts[1], 10); // Parse the second part (columns)
-  
-        // Validate that both parts successfully parsed to positive numbers
+        const parsedRows = parseInt(parts[0], 10);
+        const parsedColumns = parseInt(parts[1], 10);
         if (!isNaN(parsedRows) && parsedRows > 0 && !isNaN(parsedColumns) && parsedColumns > 0) {
           rows = parsedRows;
           columns = parsedColumns;
         } else {
-          // Handle cases like "0x2", "ax2", "3xNaN", etc. - Log warning and use default
           console.warn(`Invalid number format in layout string: "${newLayout}". Using default ${rows}x${columns}.`);
         }
       } else {
-        // Handle cases like "1x2x3" or "abc" - Log warning and use default
         console.warn(`Invalid layout format: "${newLayout}". Expected format 'RowsxColumns'. Using default ${rows}x${columns}.`);
       }
     } else {
-       // Handle cases where input isn't a string or doesn't contain 'x' - Log warning and use default
        console.warn(`Invalid or unexpected layout input: "${newLayout}". Using default ${rows}x${columns}.`);
     }
-    
+
+    // Ensure the payload matches what setLayout expects
     dispatch(setLayout({ rows, columns }));
   };
   
@@ -150,26 +160,31 @@ const ViewerToolbar: React.FC = () => {
         
         <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
         
+        {/* --- Action Buttons --- */}
         <Tooltip title="Rotate Left">
-          <IconButton>
+          {/* Add onClick handler */}
+          <IconButton onClick={onRotateLeft}>
             <RotateLeftIcon />
           </IconButton>
         </Tooltip>
-        
+
         <Tooltip title="Rotate Right">
-          <IconButton>
+          {/* Add onClick handler */}
+          <IconButton onClick={onRotateRight}>
             <RotateRightIcon />
           </IconButton>
         </Tooltip>
-        
+
         <Tooltip title="Invert">
-          <IconButton>
+          {/* Add onClick handler */}
+          <IconButton onClick={onInvert}>
             <InvertColorsIcon />
           </IconButton>
         </Tooltip>
-        
+
         <Tooltip title="Reset">
-          <IconButton>
+          {/* Add onClick handler */}
+          <IconButton onClick={onReset}>
             <RestoreIcon />
           </IconButton>
         </Tooltip>

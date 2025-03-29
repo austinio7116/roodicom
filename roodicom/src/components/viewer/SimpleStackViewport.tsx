@@ -446,12 +446,13 @@ useEffect(() => {
     };
 
     // Use the IMAGE_RENDERED event from csCoreEnums
-    element.addEventListener(csCoreEnums.Events.IMAGE_RENDERED, handleImageRendered);
+    // Cast the event name to string to avoid TypeScript errors
+    element.addEventListener(csCoreEnums.Events.IMAGE_RENDERED as unknown as string, handleImageRendered as EventListener);
 
     // Cleanup function
     return () => {
       if (element) {
-        element.removeEventListener(csCoreEnums.Events.IMAGE_RENDERED, handleImageRendered);
+        element.removeEventListener(csCoreEnums.Events.IMAGE_RENDERED as unknown as string, handleImageRendered as EventListener);
       }
     };
   } catch (err) {
