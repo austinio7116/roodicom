@@ -116,7 +116,7 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
           toolGroup.setToolActive('StackScroll', {
             bindings: [
               // The type casting might be necessary depending on library versions
-              { type: 'MouseWheel' } as unknown as cornerstoneTools.Types.IToolBinding
+              { mouseButton: csToolsEnums.MouseBindings.Wheel}
             ],
           });
 
