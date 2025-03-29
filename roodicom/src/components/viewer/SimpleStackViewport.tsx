@@ -39,6 +39,14 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
   useEffect(() => {
     if (!viewportRef.current) return;
 
+    // Prevent default context menu (right-click menu)
+    const preventContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    
+    // Add event listener to prevent context menu
+    viewportRef.current.addEventListener('contextmenu', preventContextMenu);
+
     const initializeViewport = async () => {
       try {
         const element = viewportRef.current;
@@ -147,6 +155,11 @@ const SimpleStackViewport: React.FC<ViewportProps> = ({ viewportId }) => {
 
     // Cleanup
     return () => {
+      // Remove context menu event listener
+      if (viewportRef.current) {
+        viewportRef.current.removeEventListener('contextmenu', preventContextMenu);
+      }
+      
       try {
         const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
         if (renderingEngine) {
@@ -265,7 +278,33 @@ useEffect(() => {
     }
   }
 
-  // --- Step 3: Ensure Wheel Scroll using PASSIVE mode if StackScroll is NOT the primary tool ---
+  // --- Step 3: Set default middle click to Zoom and right click to Pan ---
+  // Add default bindings for middle click (Zoom) and right click (Pan)
+  if (toolGroup.hasTool('Zoom')) {
+    console.log(`[${viewportId}] Setting Zoom tool for middle click (Auxiliary button)`);
+    try {
+      toolGroup.setToolActive('Zoom', {
+        bindings: [{ mouseButton: csToolsEnums.MouseBindings.Auxiliary }], // Middle click
+        mode: csToolsEnums.ToolModes.Active,
+      });
+    } catch (error) {
+      console.error(`[${viewportId}] Failed to set Zoom for middle click:`, error);
+    }
+  }
+
+  if (toolGroup.hasTool('Pan')) {
+    console.log(`[${viewportId}] Setting Pan tool for right click (Secondary button)`);
+    try {
+      toolGroup.setToolActive('Pan', {
+        bindings: [{ mouseButton: csToolsEnums.MouseBindings.Secondary }], // Right click
+        mode: csToolsEnums.ToolModes.Active,
+      });
+    } catch (error) {
+      console.error(`[${viewportId}] Failed to set Pan for right click:`, error);
+    }
+  }
+
+  // --- Step 4: Ensure Wheel Scroll using PASSIVE mode if StackScroll is NOT the primary tool ---
   // This allows wheel scrolling *in the background* while another tool is active via the primary mouse button.
   if (activeTool !== 'StackScroll' && toolGroup.hasTool('StackScroll')) {
       console.log(`[${viewportId}] Primary tool is ${activeTool || 'fallback'}. Setting StackScroll to Passive for MouseWheel.`);
