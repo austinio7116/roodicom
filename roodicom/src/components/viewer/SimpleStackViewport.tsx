@@ -573,27 +573,42 @@ useEffect(() => {
 
   useEffect(() => {
     if (!localImageLoaded) return;
-  
+    const element = viewportRef.current;
     const handleResize = () => {
       try {
         const renderingEngine = cornerstone3D.getRenderingEngine(renderingEngineId);
+        renderingEngine.resize(true, true);
+
+        // 4. Reset the camera for THIS specific viewport.
+        //    We can safely get the viewport again now.
         const viewport = renderingEngine.getViewport(cornerstoneViewportId);
-        if (viewport) {
-          viewport.resize(true); // true = force immediate render
+        if (viewport) { // Double-check just in case, though should exist based on above
+            //viewport.resetCamera(false, false);
         }
       } catch (e) {
         console.warn(`Viewport ${cornerstoneViewportId} failed to resize on window change`, e);
       }
     };
   
-    // Resize on window change
-    window.addEventListener('resize', handleResize);
-  
-    // Resize on mount or layout change
+    // Debounce the resize handler to avoid excessive calls during rapid resizing
+    let resizeTimeout: ReturnType<typeof setTimeout>;
+    const debouncedHandleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(handleResize, 1); // 100ms debounce (adjust as needed)
+    };
+
+    // Use ResizeObserver for reliable element resize detection
+    const observer = new ResizeObserver(debouncedHandleResize);
+    observer.observe(element);
+
+    // Initial resize call to set the correct layout when the component mounts/image loads
     handleResize();
-  
+
+    // Cleanup: remove the observer when the component unmounts or dependencies change
     return () => {
-      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout); // Clear any pending timeout
+      observer.unobserve(element); // Stop observing the element
+      observer.disconnect(); // Disconnect the observer instance
     };
   }, [localImageLoaded, renderingEngineId, cornerstoneViewportId]);
   
