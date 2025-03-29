@@ -140,6 +140,8 @@ export async function addFileToCornerstone(file: File, metadata?: any): Promise<
   // File UID returned (contains unwanted "dicomfile:" prefix)
   const imageId = waLoader.wadouri.fileManager.add(file);
 
+  await cornerstone3D.imageLoader.loadAndCacheImage(imageId);
+
   // Register metadata with Cornerstone if provided
   if (metadata && cornerstone3D.metaData) {
     try {
@@ -149,8 +151,8 @@ export async function addFileToCornerstone(file: File, metadata?: any): Promise<
         imageOrientationPatient: metadata.imageOrientationPatient,
         pixelSpacing: metadata.pixelSpacing,
         sliceThickness: metadata.sliceThickness,
-        rows: 512, // Default value, adjust if you have actual metadata
-        columns: 512, // Default value, adjust if you have actual metadata
+        rows: metadata.rows, 
+        columns: metadata.columns,
       };
       
       // Store the metadata in the global object that can be accessed by Cornerstone

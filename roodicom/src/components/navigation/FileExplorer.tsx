@@ -66,45 +66,73 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
     instanceNumber: 1,
     studyInstanceUID: '1.2.826.0.1.3680043.2.1143.1', // Default UID
     seriesInstanceUID: '1.2.826.0.1.3680043.2.1143.2', // Default UID
+    // Initialize rows and columns with defaults (or use undefined if optional)
+    rows: 0,
+    columns: 0,
+    // Optional fields might start as undefined
+    // imagePositionPatient: undefined,
+    // imageOrientationPatient: undefined,
+    // pixelSpacing: undefined,
+    // sliceThickness: undefined,
   };
-  
+
   try {
     // Read the file as an ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
-    
+
     // Parse the DICOM file
     const dataSet = dicomParser.parseDicom(new Uint8Array(arrayBuffer));
-    
+
     // Helper function to get string from a DICOM element
     const getString = (tag: string, defaultValue: string = ''): string => {
       const element = dataSet.elements[tag];
       if (!element) return defaultValue;
       return dataSet.string(tag) || defaultValue;
     };
-    
+
     // Helper function to get a number from a DICOM element
     const getNumber = (tag: string, defaultValue: number = 0): number => {
-      const value = getString(tag);
+      // Use uint16, int16, uint32, int32 for specific numeric types if needed
+      // For Rows/Columns, uint16 is common, but string parsing handles most cases
+      const element = dataSet.elements[tag];
+      if (!element) return defaultValue;
+
+      // Try getting as number first (more direct for numerical tags)
+      if (typeof dataSet.uint16 === 'function' && (tag === 'x00280010' || tag === 'x00280011')) {
+         // Rows (0028, 0010) and Columns (0028, 0011) are often US (Unsigned Short)
+         const numVal = dataSet.uint16(tag);
+         if (numVal !== undefined) {
+             return numVal;
+         }
+      }
+      // Fallback to string parsing if direct number extraction fails or isn't applicable
+      const value = dataSet.string(tag);
       return value ? parseInt(value, 10) : defaultValue;
     };
-    
+
     // Extract patient information
     metadata.patientId = getString('x00100020', 'Unknown'); // Patient ID
     metadata.patientName = getString('x00100010', 'Unknown Patient'); // Patient Name
-    
+
     // Extract study information
     metadata.studyDate = getString('x00080020', metadata.studyDate); // Study Date
     metadata.studyTime = getString('x00080030', metadata.studyTime); // Study Time
     metadata.studyInstanceUID = getString('x0020000d', metadata.studyInstanceUID); // Study Instance UID
-    
+
     // Extract series information
     metadata.modality = getString('x00080060', 'OT'); // Modality
     metadata.seriesDescription = getString('x0008103e', 'Unknown Series'); // Series Description
     metadata.seriesInstanceUID = getString('x0020000e', metadata.seriesInstanceUID); // Series Instance UID
-    
+
     // Extract instance information
     metadata.instanceNumber = getNumber('x00200013', 1); // Instance Number
-    
+
+    // --- ADDED: Extract Image Dimensions ---
+    metadata.rows = getNumber('x00280010', 0); // Rows Tag (0028, 0010)
+    metadata.columns = getNumber('x00280011', 0); // Columns Tag (0028, 0011)
+    console.log(`Extracted Rows: ${metadata.rows}, Columns: ${metadata.columns}`);
+    // --- END ADDED ---
+
     // Extract spatial metadata for MPR
     try {
       // Image Position (Patient)
@@ -116,7 +144,7 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
           console.log(`Extracted imagePositionPatient: ${metadata.imagePositionPatient}`);
         }
       }
-      
+
       // Image Orientation (Patient)
       const imageOrientationElement = dataSet.elements['x00200037'];
       if (imageOrientationElement) {
@@ -126,7 +154,7 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
           console.log(`Extracted imageOrientationPatient: ${metadata.imageOrientationPatient}`);
         }
       }
-      
+
       // Pixel Spacing
       const pixelSpacingElement = dataSet.elements['x00280030'];
       if (pixelSpacingElement) {
@@ -136,7 +164,7 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
           console.log(`Extracted pixelSpacing: ${metadata.pixelSpacing}`);
         }
       }
-      
+
       // Slice Thickness
       const sliceThicknessElement = dataSet.elements['x00180050'];
       if (sliceThicknessElement) {
@@ -149,7 +177,7 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
     } catch (error) {
       console.error('Error extracting spatial metadata:', error);
     }
-    
+
     // Format the study date if it's in DICOM format (YYYYMMDD)
     if (metadata.studyDate.match(/^[0-9]{8}$/)) {
       const year = metadata.studyDate.substring(0, 4);
@@ -157,13 +185,13 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
       const day = metadata.studyDate.substring(6, 8);
       metadata.studyDate = `${year}-${month}-${day}`;
     }
-    
+
     // Format the study time if it's in DICOM format (HHMMSS.FFFFFF)
     if (metadata.studyTime.match(/^[0-9.]+$/)) {
       const timeParts = metadata.studyTime.split('.');
       const timeStr = timeParts[0];
       let formattedTime = '';
-      
+
       if (timeStr.length >= 6) {
         const hour = timeStr.substring(0, 2);
         const minute = timeStr.substring(2, 4);
@@ -177,15 +205,16 @@ const extractDicomMetadata = async (file: File, filePath: string): Promise<Dicom
         const hour = timeStr.substring(0, 2);
         formattedTime = `${hour}:00:00`;
       }
-      
+
       if (formattedTime) {
         metadata.studyTime = formattedTime;
       }
     }
-    
+
     return metadata;
   } catch (error) {
-    console.error('Error extracting DICOM metadata:', error);
+    console.error(`Error extracting DICOM metadata for ${filePath}:`, error);
+    // Return the default metadata object even on error
     return metadata;
   }
 };
